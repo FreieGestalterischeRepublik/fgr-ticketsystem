@@ -91,6 +91,24 @@ class FGR_TS_Attachment {
         return $errors;
     }
 
+    /** Löscht alle Anhänge eines Tickets - DB-Zeilen UND die Dateien selbst. */
+    public static function delete_for_ticket( int $ticket_id ): void {
+        global $wpdb;
+        $basedir = wp_get_upload_dir()['basedir'];
+        $rows    = $wpdb->get_results( $wpdb->prepare(
+            'SELECT file_path FROM ' . FGR_TS_Ticket::table( 'attachments' ) . ' WHERE ticket_id = %d', $ticket_id
+        ), ARRAY_A );
+
+        foreach ( $rows as $row ) {
+            $full_path = $basedir . $row['file_path'];
+            if ( is_file( $full_path ) ) {
+                @unlink( $full_path );
+            }
+        }
+
+        $wpdb->delete( FGR_TS_Ticket::table( 'attachments' ), [ 'ticket_id' => $ticket_id ] );
+    }
+
     public static function filter_upload_dir( array $dirs ): array {
         $sub = '/fgr-ticketsystem/' . current_time( 'Y' ) . '/' . current_time( 'm' );
         $dirs['path']   = $dirs['basedir'] . $sub;

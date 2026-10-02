@@ -18,6 +18,7 @@ class FGR_TS_Admin {
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue' ] );
         add_action( 'admin_post_fgr_ts_reply', [ $this, 'handle_reply' ] );
         add_action( 'admin_post_fgr_ts_update', [ $this, 'handle_update' ] );
+        add_action( 'admin_post_fgr_ts_bulk', [ $this, 'handle_bulk' ] );
         add_action( 'admin_init', [ $this, 'maybe_redirect_customer' ] );
     }
 
@@ -102,9 +103,14 @@ class FGR_TS_Admin {
         $priorities = $this->index_by_id( $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'priorities' ), ARRAY_A ) );
         $categories = $this->index_by_id( $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'categories' ), ARRAY_A ) );
         $status_by_id = $this->index_by_id( $statuses );
+        $is_admin_tier = FGR_TS_Capabilities::is_admin_tier( $user_id );
         ?>
         <div class="wrap fgr-ts">
             <h1>Tickets</h1>
+
+            <?php if ( isset( $_GET['bulk_done'] ) ) : ?>
+                <div class="notice notice-success is-dismissible"><p><?php echo (int) $_GET['bulk_done']; ?> Ticket(s) aktualisiert.</p></div>
+            <?php endif; ?>
 
             <ul class="subsubsub fgr-ts-filters">
                 <li><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG ) ); ?>" class="<?php echo empty( $_GET['status'] ) ? 'current' : ''; ?>">Alle</a></li>
@@ -114,38 +120,87 @@ class FGR_TS_Admin {
                 <?php endforeach; ?>
             </ul>
 
-            <table class="widefat striped">
-                <thead>
-                    <tr>
-                        <th>#</th><th>Betreff</th><th>Kunde</th><th>Status</th><th>Priorität</th><th>Kategorie</th><th>Agent</th><th>Aktualisiert</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php if ( ! $tickets ) : ?>
-                    <tr><td colspan="8">Keine Tickets gefunden.</td></tr>
+            <form id="fgr-ts-bulk-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                <?php wp_nonce_field( 'fgr_ts_bulk', 'fgr_ts_bulk_nonce' ); ?>
+                <input type="hidden" name="action" value="fgr_ts_bulk">
+                <?php if ( ! empty( $_GET['status'] ) ) : ?>
+                    <input type="hidden" name="return_status" value="<?php echo (int) $_GET['status']; ?>">
                 <?php endif; ?>
-                <?php foreach ( $tickets as $t ) :
-                    $customer    = get_userdata( (int) $t['customer_id'] );
-                    $agent_names = array_filter( array_map( function ( $id ) {
-                        $u = get_userdata( $id );
-                        return $u ? $u->display_name : null;
-                    }, FGR_TS_Ticket::get_agents( (int) $t['id'] ) ) );
-                    $status      = $status_by_id[ $t['status_id'] ] ?? null;
-                    ?>
-                    <tr>
-                        <td><?php echo (int) $t['id']; ?></td>
-                        <td><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $t['id'] ) ); ?>"><?php echo esc_html( $t['subject'] ); ?></a></td>
-                        <td><?php echo esc_html( $customer ? $customer->display_name : '–' ); ?></td>
-                        <td><?php echo $this->badge( $status['name'] ?? '–', $status['color'] ?? '', $status['bg_color'] ?? '' ); ?></td>
-                        <td><?php echo esc_html( $priorities[ $t['priority_id'] ]['name'] ?? '–' ); ?></td>
-                        <td><?php echo esc_html( $categories[ $t['category_id'] ]['name'] ?? '–' ); ?></td>
-                        <td><?php echo esc_html( $agent_names ? implode( ', ', $agent_names ) : '– nicht zugewiesen –' ); ?></td>
-                        <td><?php echo esc_html( $this->format_date( $t['date_updated'] ) ); ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+
+                <div class="tablenav top">
+                    <div class="alignleft actions">
+                        <select name="bulk_action">
+                            <option value="">Sammelaktion</option>
+                            <option value="close">Schließen</option>
+                            <?php if ( $is_admin_tier ) : ?>
+                                <option value="delete">Löschen</option>
+                            <?php endif; ?>
+                        </select>
+                        <button type="submit" class="button">Anwenden</button>
+                    </div>
+                </div>
+
+                <table class="widefat striped">
+                    <thead>
+                        <tr>
+                            <td class="manage-column column-cb check-column"><input type="checkbox" id="fgr-ts-select-all"></td>
+                            <th>#</th><th>Betreff</th><th>Kunde</th><th>Status</th><th>Priorität</th><th>Kategorie</th><th>Agent</th><th>Aktualisiert</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if ( ! $tickets ) : ?>
+                        <tr><td colspan="9">Keine Tickets gefunden.</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ( $tickets as $t ) :
+                        $customer    = get_userdata( (int) $t['customer_id'] );
+                        $agent_names = array_filter( array_map( function ( $id ) {
+                            $u = get_userdata( $id );
+                            return $u ? $u->display_name : null;
+                        }, FGR_TS_Ticket::get_agents( (int) $t['id'] ) ) );
+                        $status      = $status_by_id[ $t['status_id'] ] ?? null;
+                        ?>
+                        <tr>
+                            <th class="check-column"><input type="checkbox" class="fgr-ts-row-checkbox" name="ticket_ids[]" value="<?php echo (int) $t['id']; ?>"></th>
+                            <td><?php echo (int) $t['id']; ?></td>
+                            <td><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $t['id'] ) ); ?>"><?php echo esc_html( $t['subject'] ); ?></a></td>
+                            <td><?php echo esc_html( $customer ? $customer->display_name : '–' ); ?></td>
+                            <td><?php echo $this->badge( $status['name'] ?? '–', $status['color'] ?? '', $status['bg_color'] ?? '' ); ?></td>
+                            <td><?php echo esc_html( $priorities[ $t['priority_id'] ]['name'] ?? '–' ); ?></td>
+                            <td><?php echo esc_html( $categories[ $t['category_id'] ]['name'] ?? '–' ); ?></td>
+                            <td><?php echo esc_html( $agent_names ? implode( ', ', $agent_names ) : '– nicht zugewiesen –' ); ?></td>
+                            <td><?php echo esc_html( $this->format_date( $t['date_updated'] ) ); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </form>
         </div>
+        <script>
+        (function() {
+            var selectAll = document.getElementById( 'fgr-ts-select-all' );
+            if ( selectAll ) {
+                selectAll.addEventListener( 'change', function() {
+                    document.querySelectorAll( '.fgr-ts-row-checkbox' ).forEach( function( cb ) {
+                        cb.checked = selectAll.checked;
+                    } );
+                } );
+            }
+            var bulkForm = document.getElementById( 'fgr-ts-bulk-form' );
+            if ( bulkForm ) {
+                bulkForm.addEventListener( 'submit', function( e ) {
+                    var action = bulkForm.querySelector( '[name="bulk_action"]' ).value;
+                    var checked = bulkForm.querySelectorAll( '.fgr-ts-row-checkbox:checked' ).length;
+                    if ( ! action || ! checked ) {
+                        e.preventDefault();
+                        return;
+                    }
+                    if ( 'delete' === action && ! confirm( checked + ' Ticket(s) wirklich endgültig löschen? Das kann nicht rückgängig gemacht werden.' ) ) {
+                        e.preventDefault();
+                    }
+                } );
+            }
+        })();
+        </script>
         <?php
     }
 
@@ -204,13 +259,22 @@ class FGR_TS_Admin {
 
                 <?php if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) :
                     $current_agent_ids = FGR_TS_Ticket::get_agents( $ticket_id );
+                    $summary_label     = $current_agent_ids
+                        ? sprintf( '%d Agent(en) ausgewählt', count( $current_agent_ids ) )
+                        : 'Keiner ausgewählt';
                     ?>
-                <label>Agent(en) <span class="description">(Strg/Cmd gedrückt halten für mehrere)</span>
-                    <select name="assigned_agents[]" multiple size="<?php echo min( 5, max( 2, count( $agents ) ) ); ?>">
-                        <?php foreach ( $agents as $a ) : ?>
-                            <option value="<?php echo (int) $a->ID; ?>" <?php selected( in_array( $a->ID, $current_agent_ids, true ) ); ?>><?php echo esc_html( $a->display_name ); ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <label>Agent(en)
+                    <details class="fgr-ts-agent-picker">
+                        <summary><?php echo esc_html( $summary_label ); ?></summary>
+                        <div class="fgr-ts-agent-list">
+                            <?php foreach ( $agents as $a ) : ?>
+                                <label class="fgr-ts-agent-option">
+                                    <input type="checkbox" name="assigned_agents[]" value="<?php echo (int) $a->ID; ?>" <?php checked( in_array( $a->ID, $current_agent_ids, true ) ); ?>>
+                                    <?php echo esc_html( $a->display_name ); ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </details>
                 </label>
                 <?php endif; ?>
 
@@ -341,6 +405,52 @@ class FGR_TS_Admin {
         }
 
         wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id ) );
+        exit;
+    }
+
+    /**
+     * Sammelverarbeitung aus der Übersicht: Schließen (alle Agenten,
+     * jeweils nur für Tickets mit Zugriff) oder Löschen (nur Admin-Tier,
+     * siehe FGR_TS_Capabilities - Löschen ist eine destruktive Aktion,
+     * die normale Agenten nicht auslösen können sollen).
+     */
+    public function handle_bulk(): void {
+        $user_id = $this->require_agent();
+        check_admin_referer( 'fgr_ts_bulk', 'fgr_ts_bulk_nonce' );
+
+        $bulk_action = sanitize_key( $_POST['bulk_action'] ?? '' );
+        $ticket_ids  = array_map( 'intval', (array) ( $_POST['ticket_ids'] ?? [] ) );
+        $count       = 0;
+
+        if ( $ticket_ids && 'close' === $bulk_action ) {
+            global $wpdb;
+            $closed_status_id = (int) $wpdb->get_var(
+                "SELECT id FROM " . FGR_TS_Ticket::table( 'statuses' ) . " WHERE is_closed = 1 ORDER BY sort_order ASC LIMIT 1"
+            );
+            if ( $closed_status_id ) {
+                foreach ( $ticket_ids as $ticket_id ) {
+                    $ticket = FGR_TS_Ticket::get( $ticket_id );
+                    if ( $ticket && FGR_TS_Capabilities::can_reply_ticket( $user_id, $ticket ) ) {
+                        FGR_TS_Ticket::set_status( $ticket_id, $closed_status_id, $user_id );
+                        $count++;
+                    }
+                }
+            }
+        } elseif ( $ticket_ids && 'delete' === $bulk_action && FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
+            foreach ( $ticket_ids as $ticket_id ) {
+                if ( FGR_TS_Ticket::get( $ticket_id ) ) {
+                    FGR_TS_Ticket::delete( $ticket_id );
+                    $count++;
+                }
+            }
+        }
+
+        $redirect = admin_url( 'admin.php?page=' . self::PAGE_SLUG );
+        if ( ! empty( $_POST['return_status'] ) ) {
+            $redirect = add_query_arg( 'status', (int) $_POST['return_status'], $redirect );
+        }
+        $redirect = add_query_arg( 'bulk_done', $count, $redirect );
+        wp_safe_redirect( $redirect );
         exit;
     }
 

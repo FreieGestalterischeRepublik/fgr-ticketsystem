@@ -161,6 +161,15 @@ class FGR_TS_Ticket {
         }
     }
 
+    /** Löscht ein Ticket komplett (Threads, Agent-Zuweisungen, Anhänge inkl. Dateien). Nur Admin-Tier, siehe FGR_TS_Capabilities. */
+    public static function delete( int $ticket_id ): void {
+        global $wpdb;
+        FGR_TS_Attachment::delete_for_ticket( $ticket_id );
+        $wpdb->delete( self::table( 'threads' ), [ 'ticket_id' => $ticket_id ] );
+        $wpdb->delete( self::table( 'ticket_agents' ), [ 'ticket_id' => $ticket_id ] );
+        $wpdb->delete( self::table( 'tickets' ), [ 'id' => $ticket_id ] );
+    }
+
     public static function get( int $ticket_id ): ?array {
         global $wpdb;
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . self::table( 'tickets' ) . " WHERE id = %d", $ticket_id ), ARRAY_A );
