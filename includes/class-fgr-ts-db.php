@@ -10,6 +10,10 @@ defined( 'ABSPATH' ) || exit;
  * - fgr_ts_threads: jede Nachricht zu einem Ticket (type: message = Beschreibung/Antwort,
  *   note = interne Notiz nur für Agenten, log = automatischer Aktivitätseintrag)
  * - fgr_ts_attachments: Dateianhänge, an einen Thread gehängt
+ * - fgr_ts_ticket_agents: welche Agenten einem Ticket zugewiesen sind
+ *   (mehrere möglich, siehe FGR_TS_Ticket::set_agents()). Die Spalte
+ *   tickets.assigned_agent ist seit Schema-Version 2 ungenutzt (bleibt
+ *   nur noch für alte Zeilen stehen, dbDelta entfernt sie nicht).
  */
 class FGR_TS_DB {
 
@@ -82,6 +86,13 @@ class FGR_TS_DB {
             PRIMARY KEY (id),
             KEY ticket_id (ticket_id),
             KEY legacy_id (legacy_id)
+        ) {$charset_collate};
+
+        CREATE TABLE {$p}ticket_agents (
+            ticket_id BIGINT UNSIGNED NOT NULL,
+            agent_id BIGINT UNSIGNED NOT NULL,
+            PRIMARY KEY (ticket_id, agent_id),
+            KEY agent_id (agent_id)
         ) {$charset_collate};
 
         CREATE TABLE {$p}attachments (

@@ -125,9 +125,12 @@ class FGR_TS_Admin {
                     <tr><td colspan="8">Keine Tickets gefunden.</td></tr>
                 <?php endif; ?>
                 <?php foreach ( $tickets as $t ) :
-                    $customer = get_userdata( (int) $t['customer_id'] );
-                    $agent    = $t['assigned_agent'] ? get_userdata( (int) $t['assigned_agent'] ) : null;
-                    $status   = $status_by_id[ $t['status_id'] ] ?? null;
+                    $customer    = get_userdata( (int) $t['customer_id'] );
+                    $agent_names = array_filter( array_map( function ( $id ) {
+                        $u = get_userdata( $id );
+                        return $u ? $u->display_name : null;
+                    }, FGR_TS_Ticket::get_agents( (int) $t['id'] ) ) );
+                    $status      = $status_by_id[ $t['status_id'] ] ?? null;
                     ?>
                     <tr>
                         <td><?php echo (int) $t['id']; ?></td>
@@ -136,7 +139,7 @@ class FGR_TS_Admin {
                         <td><?php echo $this->badge( $status['name'] ?? '–', $status['color'] ?? '', $status['bg_color'] ?? '' ); ?></td>
                         <td><?php echo esc_html( $priorities[ $t['priority_id'] ]['name'] ?? '–' ); ?></td>
                         <td><?php echo esc_html( $categories[ $t['category_id'] ]['name'] ?? '–' ); ?></td>
-                        <td><?php echo esc_html( $agent ? $agent->display_name : '– nicht zugewiesen –' ); ?></td>
+                        <td><?php echo esc_html( $agent_names ? implode( ', ', $agent_names ) : '– nicht zugewiesen –' ); ?></td>
                         <td><?php echo esc_html( $this->format_date( $t['date_updated'] ) ); ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -199,12 +202,13 @@ class FGR_TS_Admin {
                     </select>
                 </label>
 
-                <?php if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) : ?>
-                <label>Agent
-                    <select name="assigned_agent">
-                        <option value="">– nicht zugewiesen –</option>
+                <?php if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) :
+                    $current_agent_ids = FGR_TS_Ticket::get_agents( $ticket_id );
+                    ?>
+                <label>Agent(en) <span class="description">(Strg/Cmd gedrückt halten für mehrere)</span>
+                    <select name="assigned_agents[]" multiple size="<?php echo min( 5, max( 2, count( $agents ) ) ); ?>">
                         <?php foreach ( $agents as $a ) : ?>
-                            <option value="<?php echo (int) $a->ID; ?>" <?php selected( (int) $ticket['assigned_agent'], $a->ID ); ?>><?php echo esc_html( $a->display_name ); ?></option>
+                            <option value="<?php echo (int) $a->ID; ?>" <?php selected( in_array( $a->ID, $current_agent_ids, true ) ); ?>><?php echo esc_html( $a->display_name ); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
@@ -244,8 +248,17 @@ class FGR_TS_Admin {
             <!-- Wie bei SupportCandy gewohnt: neueste Nachricht oben, älteste unten. -->
             <div class="fgr-ts-thread">
                 <?php foreach ( array_reverse( $threads ) as $th ) :
-                    if ( 'log' === $th['type'] ) continue; // Aktivitäts-Log hier ausgeblendet, siehe Planungs-Notizen
                     $author = $th['author_id'] ? get_userdata( (int) $th['author_id'] ) : null;
+
+                    if ( 'log' === $th['type'] ) : ?>
+                        <div class="fgr-ts-log-entry">
+                            <?php echo esc_html( $th['body'] ); ?>
+                            &ndash; <?php echo esc_html( $author ? $author->display_name : 'System' ); ?>,
+                            <?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?>
+                        </div>
+                        <?php continue; ?>
+                    <?php endif;
+
                     $css_role = 'note' === $th['type'] ? 'note' : $th['author_role'];
                     ?>
                     <div class="fgr-ts-message fgr-ts-message--<?php echo esc_attr( $css_role ); ?>">
@@ -319,14 +332,12 @@ class FGR_TS_Admin {
         ], [ 'id' => $ticket_id ] );
 
         if ( (int) $_POST['status_id'] !== (int) $ticket['status_id'] ) {
-            FGR_TS_Ticket::set_status( $ticket_id, (int) $_POST['status_id'] );
+            FGR_TS_Ticket::set_status( $ticket_id, (int) $_POST['status_id'], $user_id );
         }
 
-        if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) && isset( $_POST['assigned_agent'] ) ) {
-            $new_agent = $_POST['assigned_agent'] !== '' ? (int) $_POST['assigned_agent'] : null;
-            if ( $new_agent && $new_agent !== (int) $ticket['assigned_agent'] ) {
-                FGR_TS_Ticket::assign_agent( $ticket_id, $new_agent );
-            }
+        if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
+            $new_agents = array_map( 'intval', (array) ( $_POST['assigned_agents'] ?? [] ) );
+            FGR_TS_Ticket::set_agents( $ticket_id, $new_agents );
         }
 
         wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id ) );

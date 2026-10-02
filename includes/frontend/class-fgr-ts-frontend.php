@@ -260,6 +260,7 @@ class FGR_TS_Frontend {
     private function render_new_form( int $user_id ): void {
         global $wpdb;
         $categories = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'categories' ) . ' ORDER BY sort_order', ARRAY_A );
+        $priorities = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'priorities' ) . ' ORDER BY sort_order', ARRAY_A );
         ?>
         <div id="fgr_ts_portal" class="fgr-ts-portal">
             <p class="fgr-ts-back-link"><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Übersicht</a></p>
@@ -280,6 +281,13 @@ class FGR_TS_Frontend {
                 <select id="fgr-ts-category" name="category_id" required>
                     <?php foreach ( $categories as $c ) : ?>
                         <option value="<?php echo (int) $c['id']; ?>"><?php echo esc_html( $c['name'] ); ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label for="fgr-ts-priority">Priorität</label>
+                <select id="fgr-ts-priority" name="priority_id" required>
+                    <?php foreach ( $priorities as $p ) : ?>
+                        <option value="<?php echo (int) $p['id']; ?>"><?php echo esc_html( $p['name'] ); ?></option>
                     <?php endforeach; ?>
                 </select>
 
@@ -312,6 +320,7 @@ class FGR_TS_Frontend {
         $subject     = sanitize_text_field( wp_unslash( $_POST['subject'] ?? '' ) );
         $body        = sanitize_textarea_field( wp_unslash( $_POST['body'] ?? '' ) );
         $category_id = (int) ( $_POST['category_id'] ?? 0 );
+        $priority_id = (int) ( $_POST['priority_id'] ?? 0 );
         $consent     = ! empty( $_POST['gdpr_consent'] );
 
         if ( '' === $subject || '' === $body || ! $category_id || ! $consent ) {
@@ -319,7 +328,7 @@ class FGR_TS_Frontend {
             exit;
         }
 
-        $ticket_id = FGR_TS_Ticket::create( $user_id, $subject, $body, $category_id, $_SERVER['REMOTE_ADDR'] ?? null );
+        $ticket_id = FGR_TS_Ticket::create( $user_id, $subject, $body, $category_id, $_SERVER['REMOTE_ADDR'] ?? null, $priority_id );
 
         if ( ! empty( $_FILES['attachments'] ) ) {
             $threads = FGR_TS_Ticket::get_threads( $ticket_id );
@@ -455,7 +464,7 @@ class FGR_TS_Frontend {
         $allowed = [ 'offen', 'geschlossen', 'In Wartestellung' ];
         $status_name = sanitize_text_field( wp_unslash( $_POST['status_name'] ?? '' ) );
         if ( in_array( $status_name, $allowed, true ) ) {
-            FGR_TS_Ticket::set_status_by_name( $ticket_id, $status_name );
+            FGR_TS_Ticket::set_status_by_name( $ticket_id, $status_name, $user_id );
         }
 
         wp_safe_redirect( $this->portal_url( [ 'ticket' => $ticket_id ] ) );

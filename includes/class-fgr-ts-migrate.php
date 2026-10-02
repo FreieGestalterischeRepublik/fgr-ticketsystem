@@ -11,9 +11,8 @@ defined( 'ABSPATH' ) || exit;
  * Nichts an den SupportCandy-Tabellen wird verändert - reiner Lese-Import.
  *
  * Vereinfachungen gegenüber dem Original (siehe Planungs-Notizen):
- * - Mehrfach zugewiesene Agenten (z.B. "1|3") werden auf den ERSTEN
- *   genannten Agenten reduziert - im neuen System gibt es nur einen
- *   zuständigen Agenten pro Ticket.
+ * - Mehrfach zugewiesene Agenten (z.B. "1|3") werden ALLE übernommen, in
+ *   die eigene fgr_ts_ticket_agents-Tabelle (siehe FGR_TS_Ticket::set_agents()).
  * - Soft-gelöschte Tickets/Threads (is_active = 0) werden nicht übernommen.
  * - Tags, Timer, KI-Felder, Mehrfach-Empfänger etc. werden nicht übernommen
  *   (siehe Planungs-Notizen: ungenutzt).
@@ -67,16 +66,9 @@ class FGR_TS_Migrate {
                 continue;
             }
 
-            $assigned_agent = null;
-            if ( ! empty( $t['assigned_agent'] ) ) {
-                $first = explode( '|', $t['assigned_agent'] )[0];
-                $assigned_agent = is_numeric( $first ) ? (int) $first : null;
-            }
-
             $wpdb->insert( "{$new}tickets", [
                 'subject'        => $t['subject'],
                 'customer_id'    => $customer_id,
-                'assigned_agent' => $assigned_agent,
                 'status_id'      => $status_map[ (int) $t['status'] ] ?? array_key_first( $status_map ),
                 'priority_id'    => $priority_map[ (int) $t['priority'] ] ?? array_key_first( $priority_map ),
                 'category_id'    => $category_map[ (int) $t['category'] ] ?? array_key_first( $category_map ),
@@ -89,8 +81,20 @@ class FGR_TS_Migrate {
                 'legacy_id'      => $t['id'],
             ] );
 
-            $ticket_id_map[ (int) $t['id'] ] = (int) $wpdb->insert_id;
+            $new_ticket_id = (int) $wpdb->insert_id;
+            $ticket_id_map[ (int) $t['id'] ] = $new_ticket_id;
             $imported_tickets++;
+
+            if ( ! empty( $t['assigned_agent'] ) ) {
+                foreach ( explode( '|', $t['assigned_agent'] ) as $agent_user_id ) {
+                    if ( is_numeric( $agent_user_id ) ) {
+                        $wpdb->insert( "{$new}ticket_agents", [
+                            'ticket_id' => $new_ticket_id,
+                            'agent_id'  => (int) $agent_user_id,
+                        ] );
+                    }
+                }
+            }
         }
         WP_CLI::log( "{$imported_tickets} Tickets importiert." );
 

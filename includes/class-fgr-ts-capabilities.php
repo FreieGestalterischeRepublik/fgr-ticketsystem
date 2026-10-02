@@ -27,7 +27,7 @@ class FGR_TS_Capabilities {
             return true;
         }
         if ( self::is_agent( $user_id ) ) {
-            return (int) $ticket['assigned_agent'] === $user_id;
+            return in_array( $user_id, FGR_TS_Ticket::get_agents( (int) $ticket['id'] ), true );
         }
         return (int) $ticket['customer_id'] === $user_id;
     }

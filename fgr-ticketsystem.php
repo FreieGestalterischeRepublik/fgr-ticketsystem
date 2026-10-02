@@ -2,7 +2,7 @@
 /**
  * Plugin Name:  FGR Ticketsystem
  * Description:  Eigenes Support-Ticketsystem für die Freie Gestalterische Republik, als Ersatz für SupportCandy. Werbefrei.
- * Version:      1.0.1
+ * Version:      1.1.0
  * Author:       Freie Gestalterische Republik
  * Author URI:   https://fgr.design
  * License:      GPL-2.0-or-later
@@ -13,10 +13,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FGR_TS_VERSION', '1.0.1' );
+define( 'FGR_TS_VERSION', '1.1.0' );
 define( 'FGR_TS_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'FGR_TS_URL',     plugin_dir_url( __FILE__ ) );
-define( 'FGR_TS_DB_VERSION', '1' ); // bei Schema-Änderungen hochzählen, löst dbDelta erneut aus
+define( 'FGR_TS_DB_VERSION', '2' ); // bei Schema-Änderungen hochzählen, löst dbDelta erneut aus
 
 // Update-Checker: fragt die zentrale FGR-Update-API ab (nicht direkt GitHub)
 require_once FGR_TS_DIR . 'lib/plugin-update-checker/plugin-update-checker.php';

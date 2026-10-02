@@ -20,18 +20,20 @@ class FGR_TS_Ticket {
      * Legt ein neues Ticket samt erster Nachricht (Beschreibung) an.
      * Gibt die neue Ticket-ID zurück.
      */
-    public static function create( int $customer_id, string $subject, string $body, int $category_id, ?string $ip_address = null ): int {
+    public static function create( int $customer_id, string $subject, string $body, int $category_id, ?string $ip_address = null, ?int $priority_id = null ): int {
         global $wpdb;
 
-        $default_status_id   = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'statuses' ) . " WHERE is_closed = 0 ORDER BY sort_order ASC LIMIT 1" );
-        $default_priority_id = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'priorities' ) . " ORDER BY sort_order ASC LIMIT 1" );
+        $default_status_id = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'statuses' ) . " WHERE is_closed = 0 ORDER BY sort_order ASC LIMIT 1" );
+        if ( ! $priority_id || ! $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . self::table( 'priorities' ) . " WHERE id = %d", $priority_id ) ) ) {
+            $priority_id = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'priorities' ) . " ORDER BY sort_order ASC LIMIT 1" );
+        }
         $now = current_time( 'mysql' );
 
         $wpdb->insert( self::table( 'tickets' ), [
             'subject'      => $subject,
             'customer_id'  => $customer_id,
             'status_id'    => $default_status_id,
-            'priority_id'  => $default_priority_id,
+            'priority_id'  => $priority_id,
             'category_id'  => $category_id,
             'source'       => 'web',
             'ip_address'   => $ip_address,
@@ -89,38 +91,69 @@ class FGR_TS_Ticket {
         self::set_status_by_name( $ticket_id, $target_name );
     }
 
-    public static function set_status_by_name( int $ticket_id, string $status_name ): void {
+    public static function set_status_by_name( int $ticket_id, string $status_name, ?int $changed_by = null ): void {
         global $wpdb;
         $status_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . self::table( 'statuses' ) . " WHERE name = %s", $status_name ) );
         if ( $status_id ) {
-            self::set_status( $ticket_id, $status_id );
+            self::set_status( $ticket_id, $status_id, $changed_by );
         }
     }
 
-    public static function set_status( int $ticket_id, int $status_id ): void {
+    /**
+     * $changed_by: nur bei einer BEWUSSTEN Status-Änderung (Dropdown im
+     * Admin, Status-Buttons im Frontend) mitgeben - erzeugt dann einen
+     * sichtbaren Verlaufseintrag ("Status geändert zu ..."), ähnlich wie
+     * bisher bei SupportCandy. Die automatische Status-Umschaltung bei
+     * einer Antwort (auto_advance_status()) lässt das bewusst weg, sonst
+     * gäbe es bei jeder Antwort einen doppelten/redundanten Eintrag.
+     */
+    public static function set_status( int $ticket_id, int $status_id, ?int $changed_by = null ): void {
         global $wpdb;
-        $is_closed = (int) $wpdb->get_var( $wpdb->prepare( "SELECT is_closed FROM " . self::table( 'statuses' ) . " WHERE id = %d", $status_id ) );
+        $status      = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . self::table( 'statuses' ) . " WHERE id = %d", $status_id ), ARRAY_A );
+        $is_closed   = $status ? (int) $status['is_closed'] : 0;
 
         $data = [ 'status_id' => $status_id, 'date_updated' => current_time( 'mysql' ) ];
         $data['date_closed'] = $is_closed ? current_time( 'mysql' ) : null;
 
         $wpdb->update( self::table( 'tickets' ), $data, [ 'id' => $ticket_id ] );
 
+        if ( $changed_by && $status ) {
+            $role = FGR_TS_Capabilities::is_agent( $changed_by ) ? 'agent' : 'customer';
+            self::add_thread( $ticket_id, 'log', $changed_by, $role, sprintf( 'Status geändert zu "%s"', $status['name'] ) );
+        }
+
         do_action( 'fgr_ts_ticket_status_changed', $ticket_id, $status_id, (bool) $is_closed );
     }
 
-    /**
-     * Weist einen Agenten zu. Ab jetzt bekommt NUR noch dieser Agent
-     * Benachrichtigungen zu diesem Ticket (siehe Planungs-Notizen).
-     */
-    public static function assign_agent( int $ticket_id, int $agent_id ): void {
+    /** Liste der zugewiesenen Agenten (wp_users.ID) eines Tickets. */
+    public static function get_agents( int $ticket_id ): array {
         global $wpdb;
-        $wpdb->update( self::table( 'tickets' ), [
-            'assigned_agent' => $agent_id,
-            'date_updated'   => current_time( 'mysql' ),
-        ], [ 'id' => $ticket_id ] );
+        return array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+            "SELECT agent_id FROM " . self::table( 'ticket_agents' ) . " WHERE ticket_id = %d", $ticket_id
+        ) ) );
+    }
 
-        do_action( 'fgr_ts_ticket_assigned', $ticket_id, $agent_id );
+    /**
+     * Setzt die komplette Zuweisung (ersetzt die bisherige Liste - ein
+     * Ticket kann wie früher bei SupportCandy an mehrere Agenten
+     * gleichzeitig gehen). Nur NEU hinzugekommene Agenten bekommen eine
+     * Benachrichtigung, nicht die, die schon zugewiesen waren.
+     */
+    public static function set_agents( int $ticket_id, array $agent_ids ): void {
+        global $wpdb;
+        $agent_ids = array_values( array_unique( array_map( 'intval', $agent_ids ) ) );
+        $old_agent_ids = self::get_agents( $ticket_id );
+
+        $wpdb->delete( self::table( 'ticket_agents' ), [ 'ticket_id' => $ticket_id ] );
+        foreach ( $agent_ids as $agent_id ) {
+            $wpdb->insert( self::table( 'ticket_agents' ), [ 'ticket_id' => $ticket_id, 'agent_id' => $agent_id ] );
+        }
+        $wpdb->update( self::table( 'tickets' ), [ 'date_updated' => current_time( 'mysql' ) ], [ 'id' => $ticket_id ] );
+
+        $newly_added = array_diff( $agent_ids, $old_agent_ids );
+        if ( $newly_added ) {
+            do_action( 'fgr_ts_ticket_assigned', $ticket_id, $newly_added );
+        }
     }
 
     public static function get( int $ticket_id ): ?array {
@@ -144,7 +177,7 @@ class FGR_TS_Ticket {
         if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
             // keine Einschränkung
         } elseif ( FGR_TS_Capabilities::is_agent( $user_id ) ) {
-            $where[]  = 'assigned_agent = %d';
+            $where[]  = 'id IN (SELECT ticket_id FROM ' . self::table( 'ticket_agents' ) . ' WHERE agent_id = %d)';
             $params[] = $user_id;
         } else {
             $where[]  = 'customer_id = %d';

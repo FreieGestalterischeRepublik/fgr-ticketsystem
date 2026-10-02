@@ -7,8 +7,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * Regeln (wie mit Marc abgesprochen):
  * - Neues Ticket (noch nicht zugewiesen) -> alle Agenten.
- * - Sobald ein Agent zugewiesen ist -> nur noch dieser Agent.
- * - Kundenantwort -> der zugewiesene Agent (oder alle, falls noch keiner da ist).
+ * - Sobald Agenten zugewiesen sind (können mehrere sein) -> nur noch die zugewiesenen.
+ * - Kundenantwort -> die zugewiesenen Agenten (oder alle, falls noch keiner da ist).
  * - Agentenantwort -> der Kunde.
  */
 class FGR_TS_Notifications {
@@ -29,13 +29,18 @@ class FGR_TS_Notifications {
         }
     }
 
-    public function on_ticket_assigned( int $ticket_id, int $agent_id ): void {
+    /** $agent_ids: die NEU hinzugekommenen Agenten (siehe FGR_TS_Ticket::set_agents()). */
+    public function on_ticket_assigned( int $ticket_id, array $agent_ids ): void {
         $ticket = FGR_TS_Ticket::get( $ticket_id );
-        $agent  = get_userdata( $agent_id );
-        if ( ! $ticket || ! $agent ) {
+        if ( ! $ticket ) {
             return;
         }
-        $this->send( $agent->user_email, "Dir zugewiesen: Ticket #{$ticket_id}: {$ticket['subject']}", $this->ticket_link( $ticket_id, "Dir wurde ein Ticket zugewiesen:" ) );
+        foreach ( $agent_ids as $agent_id ) {
+            $agent = get_userdata( $agent_id );
+            if ( $agent ) {
+                $this->send( $agent->user_email, "Dir zugewiesen: Ticket #{$ticket_id}: {$ticket['subject']}", $this->ticket_link( $ticket_id, "Dir wurde ein Ticket zugewiesen:" ) );
+            }
+        }
     }
 
     public function on_ticket_replied( int $ticket_id, string $author_role, int $thread_id ): void {
@@ -45,10 +50,13 @@ class FGR_TS_Notifications {
         }
 
         if ( 'customer' === $author_role ) {
-            if ( $ticket['assigned_agent'] ) {
-                $agent = get_userdata( (int) $ticket['assigned_agent'] );
-                if ( $agent ) {
-                    $this->send( $agent->user_email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $this->ticket_link( $ticket_id, "Der Kunde hat geantwortet:" ) );
+            $assigned_agents = FGR_TS_Ticket::get_agents( $ticket_id );
+            if ( $assigned_agents ) {
+                foreach ( $assigned_agents as $agent_id ) {
+                    $agent = get_userdata( $agent_id );
+                    if ( $agent ) {
+                        $this->send( $agent->user_email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $this->ticket_link( $ticket_id, "Der Kunde hat geantwortet:" ) );
+                    }
                 }
             } else {
                 foreach ( $this->get_agent_emails() as $email ) {
