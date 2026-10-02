@@ -20,6 +20,8 @@ class FGR_TS_Frontend {
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue' ] );
         add_action( 'admin_post_fgr_ts_create', [ $this, 'handle_create' ] );
         add_action( 'admin_post_fgr_ts_frontend_reply', [ $this, 'handle_reply' ] );
+        add_action( 'admin_post_nopriv_fgr_ts_register', [ $this, 'handle_register' ] );
+        add_action( 'admin_post_fgr_ts_register', [ $this, 'handle_register' ] );
     }
 
     public function enqueue(): void {
@@ -34,6 +36,11 @@ class FGR_TS_Frontend {
 
     public function render_shortcode(): string {
         if ( ! is_user_logged_in() ) {
+            if ( isset( $_GET['view'] ) && 'register' === $_GET['view'] ) {
+                ob_start();
+                $this->render_register_form();
+                return ob_get_clean();
+            }
             return $this->render_login_prompt();
         }
 
@@ -55,12 +62,100 @@ class FGR_TS_Frontend {
     private function render_login_prompt(): string {
         ob_start();
         ?>
-        <div id="fgr_ts_portal" class="fgr-ts-portal">
+        <div id="fgr_ts_portal" class="fgr-ts-portal fgr-ts-login-prompt">
             <p>Um Tickets zu sehen oder zu erstellen, melde dich bitte an.</p>
             <a class="cta-primary" href="<?php echo esc_url( wp_login_url( get_permalink() ) ); ?>"><span>Anmelden</span></a>
+            <p class="fgr-ts-register-hint">Noch kein Konto? <a href="<?php echo esc_url( $this->portal_url( [ 'view' => 'register' ] ) ); ?>">Jetzt registrieren</a></p>
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    private function render_register_form(): void {
+        ?>
+        <div id="fgr_ts_portal" class="fgr-ts-portal">
+            <p><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Anmeldung</a></p>
+            <h2>Konto erstellen</h2>
+
+            <?php if ( ! empty( $_GET['error'] ) ) : ?>
+                <p class="fgr-ts-error"><?php echo esc_html( wp_unslash( $_GET['error'] ) ); ?></p>
+            <?php endif; ?>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-form">
+                <?php wp_nonce_field( 'fgr_ts_register', 'fgr_ts_nonce' ); ?>
+                <input type="hidden" name="action" value="fgr_ts_register">
+
+                <label for="fgr-ts-reg-name">Name</label>
+                <input type="text" id="fgr-ts-reg-name" name="name" required value="<?php echo esc_attr( wp_unslash( $_GET['name'] ?? '' ) ); ?>">
+
+                <label for="fgr-ts-reg-email">E-Mail-Adresse</label>
+                <input type="email" id="fgr-ts-reg-email" name="email" required value="<?php echo esc_attr( wp_unslash( $_GET['email'] ?? '' ) ); ?>">
+
+                <label for="fgr-ts-reg-pass">Passwort</label>
+                <input type="password" id="fgr-ts-reg-pass" name="password" required minlength="12">
+
+                <label for="fgr-ts-reg-pass2">Passwort wiederholen</label>
+                <input type="password" id="fgr-ts-reg-pass2" name="password2" required minlength="12">
+
+                <p class="fgr-ts-gdpr">
+                    <label>
+                        <input type="checkbox" name="gdpr_consent" value="1" required>
+                        <?php echo wp_kses_post( get_option( 'fgr_ts_gdpr_text', FGR_TS_DB::default_gdpr_text() ) ); ?>
+                    </label>
+                </p>
+
+                <input type="submit" value="Konto erstellen">
+            </form>
+        </div>
+        <?php
+    }
+
+    public function handle_register(): void {
+        check_admin_referer( 'fgr_ts_register', 'fgr_ts_nonce' );
+
+        $name     = sanitize_text_field( wp_unslash( $_POST['name'] ?? '' ) );
+        $email    = sanitize_email( wp_unslash( $_POST['email'] ?? '' ) );
+        $password = (string) ( $_POST['password'] ?? '' );
+        $password2 = (string) ( $_POST['password2'] ?? '' );
+        $consent  = ! empty( $_POST['gdpr_consent'] );
+
+        $error = '';
+        if ( '' === $name || ! is_email( $email ) || '' === $password ) {
+            $error = 'Bitte alle Pflichtfelder gültig ausfüllen.';
+        } elseif ( $password !== $password2 ) {
+            $error = 'Die Passwörter stimmen nicht überein.';
+        } elseif ( strlen( $password ) < 12 ) {
+            $error = 'Das Passwort muss mindestens 12 Zeichen lang sein.';
+        } elseif ( ! $consent ) {
+            $error = 'Bitte der Datenschutzerklärung zustimmen.';
+        } elseif ( email_exists( $email ) ) {
+            $error = 'Zu dieser E-Mail-Adresse existiert bereits ein Konto. Bitte melde dich stattdessen an.';
+        }
+
+        if ( $error ) {
+            wp_safe_redirect( $this->portal_url( [ 'view' => 'register', 'error' => rawurlencode( $error ), 'name' => rawurlencode( $name ), 'email' => rawurlencode( $email ) ] ) );
+            exit;
+        }
+
+        $user_id = wp_insert_user( [
+            'user_login'   => $email,
+            'user_email'   => $email,
+            'user_pass'    => $password,
+            'display_name' => $name,
+            'first_name'   => $name,
+            'role'         => 'subscriber',
+        ] );
+
+        if ( is_wp_error( $user_id ) ) {
+            wp_safe_redirect( $this->portal_url( [ 'view' => 'register', 'error' => rawurlencode( $user_id->get_error_message() ) ] ) );
+            exit;
+        }
+
+        wp_set_current_user( $user_id );
+        wp_set_auth_cookie( $user_id );
+
+        wp_safe_redirect( $this->portal_url() );
+        exit;
     }
 
     private function portal_url( array $args = [] ): string {

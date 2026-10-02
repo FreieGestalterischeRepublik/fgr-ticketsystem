@@ -21,6 +21,7 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 #fgr_ts_portal {
     font: normal 400 var(--normalFS, 1rem) aktiv-grotesk, sans-serif;
     color: var(--darkColor);
+    padding: 20px;
 }
 
 #fgr_ts_portal .fgr-ts-form,
@@ -70,6 +71,48 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 
 .fgr-ts-tabs .cta-tabs {
     text-decoration: none;
+    font-weight: 600 !important;
+    font-size: calc(var(--ctaPrimaryFS, 1.125rem) - 2px) !important;
+}
+
+/* Gleicher animierter Hover wie der "Neues Ticket erstellen"-Button
+   (.cta-primary): Rahmen füllt sich beim Hover links/unten auf. */
+.fgr-ts-tabs .cta-tabs:before {
+    content: "";
+    display: block;
+    height: 0;
+    width: 3px;
+    background: var(--primaryColor);
+    transition: height 0.125s linear;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.fgr-ts-tabs .cta-tabs:after {
+    content: "";
+    display: block;
+    height: 3px;
+    width: 0;
+    background: var(--primaryColor);
+    transition: width 0.125s linear;
+    position: absolute;
+    right: -3px;
+    bottom: 0;
+}
+
+.fgr-ts-tabs .cta-tabs:hover:before {
+    height: 100%;
+}
+
+.fgr-ts-tabs .cta-tabs:hover:after {
+    width: 100%;
+}
+
+.fgr-ts-tabs .cta-tabs:hover {
+    border-color: transparent !important;
+    color: var(--primaryColor) !important;
+    transition: border-color 0.25s linear !important;
 }
 
 .fgr-ts-ticket-list {
@@ -206,4 +249,17 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 .fgr-ts-error {
     color: #c0392b;
     font-weight: 700;
+}
+
+.fgr-ts-login-prompt {
+    text-align: center;
+}
+
+.fgr-ts-login-prompt .cta-primary {
+    margin: var(--outerMargin) auto 0;
+}
+
+.fgr-ts-register-hint {
+    margin-top: 20px !important;
+    font-size: var(--smallFS, 0.75rem);
 }
