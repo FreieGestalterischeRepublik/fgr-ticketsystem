@@ -40,10 +40,15 @@ require_once FGR_TS_DIR . 'includes/class-fgr-ts-capabilities.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-ticket.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-notifications.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-attachment.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-registration.php';
 require_once FGR_TS_DIR . 'includes/admin/class-fgr-ts-admin.php';
 require_once FGR_TS_DIR . 'includes/frontend/class-fgr-ts-frontend.php';
 
-register_activation_hook( __FILE__, [ 'FGR_TS_DB', 'install' ] );
+register_activation_hook( __FILE__, function () {
+    FGR_TS_DB::install();
+    FGR_TS_Registration::activate();
+} );
+register_deactivation_hook( __FILE__, [ 'FGR_TS_Registration', 'deactivate' ] );
 
 add_action( 'plugins_loaded', function () {
     FGR_TS_DB::maybe_upgrade();
@@ -51,4 +56,17 @@ add_action( 'plugins_loaded', function () {
     new FGR_TS_Notifications();
     new FGR_TS_Admin();
     new FGR_TS_Frontend();
+    new FGR_TS_Registration();
+} );
+
+// Suchfeld in der Admin-Toolbar ausblenden: das globale Theme-CSS
+// (body input[type="text"] { border-bottom: 3px solid ... }) erwischt es
+// seitenweit und sieht kaputt aus - unabhängig vom Ticketsystem, aber hier
+// aufgefallen. remove_node() allein reichte nicht zuverlässig, daher
+// zusätzlich per CSS versteckt.
+add_action( 'admin_bar_menu', function ( $wp_admin_bar ) {
+    $wp_admin_bar->remove_node( 'search' );
+}, 999 );
+add_action( 'wp_before_admin_bar_render', function () {
+    echo '<style>#wp-admin-bar-search{display:none!important;}</style>';
 } );

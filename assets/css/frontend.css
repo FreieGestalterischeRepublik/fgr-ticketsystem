@@ -24,9 +24,47 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     padding: 20px;
 }
 
+/* Die globale Theme-Regel "p { margin: 30px 0 !important }" legt sonst
+   nochmal oben drauf - erstes Element soll bündig mit den 20px Padding
+   abschließen, nicht zusätzlichen Abstand mitbringen. */
+#fgr_ts_portal > *:first-child {
+    margin-top: 0 !important;
+}
+
 #fgr_ts_portal .fgr-ts-form,
 #fgr_ts_portal .fgr-ts-thread {
     max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#fgr_ts_portal .fgr-ts-register-form {
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+#fgr_ts_portal textarea::placeholder,
+#fgr_ts_portal input::placeholder {
+    color: #999 !important;
+    opacity: 1;
+}
+
+#fgr_ts_portal input[type="password"] {
+    padding: 7.5px 7.5px 7.5px 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: calc(100% - 15px) !important;
+    margin: 0 15px 20px 0 !important;
+    display: inline-block;
+    outline: none;
+    border: 0 solid transparent !important;
+    border-bottom: 3px solid var(--darkColor) !important;
+    color: var(--darkColor) !important;
+    background-color: transparent !important;
+    font: normal 400 var(--paragraphs, 1.25rem) aktiv-grotesk, sans-serif !important;
+    font-style: italic !important;
+    border-radius: 0 !important;
+    transition: var(--colortransition);
 }
 
 #fgr_ts_portal a:not(.cta-primary):not(.cta-tabs),
@@ -41,7 +79,7 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 #fgr_ts_portal .fgr-ts-message--own strong,
 #fgr_ts_portal .fgr-ts-message--own p,
 #fgr_ts_portal .fgr-ts-message--own a:not(.cta-primary):not(.cta-tabs) {
-    color: var(--lightColor) !important;
+    color: var(--darkColor) !important;
 }
 
 #fgr_ts_portal h2 {
@@ -136,7 +174,7 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 
 .fgr-ts-ticket-subject {
     flex: 1;
-    font-weight: 700;
+    font-weight: 500;
 }
 
 .fgr-ts-ticket-date {
@@ -154,16 +192,62 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     white-space: nowrap;
 }
 
+/* Badge, Zurück-Link, Titel, Status-Buttons, Konversation und Formular
+   bilden zusammen EINE Spalte: untereinander linksbündig, die Spalte
+   selbst aber mittig auf der Seite (nicht links drangeklatscht). */
+.fgr-ts-status-actions,
+.fgr-ts-closed-note {
+    max-width: 700px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.fgr-ts-back-link {
+    margin-top: 0 !important;
+    margin-bottom: 25px !important;
+}
+
+#fgr_ts_portal > .fgr-ts-badge {
+    display: block;
+    width: fit-content;
+    margin-bottom: 15px;
+}
+
+.fgr-ts-status-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    margin-bottom: 25px;
+}
+
+/* <button class="cta-tabs">: gleiches "replaced element"-Problem wie bei
+   .fgr-ts-submit - Browser-Standardrahmen muss explizit zurückgesetzt
+   werden, sonst zeigt sich ein voller Rahmen statt nur oben/rechts. */
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background: transparent !important;
+    font-family: inherit;
+    cursor: pointer;
+    border-style: solid !important;
+    border-width: 3px !important;
+    border-bottom-color: transparent !important;
+    border-left-color: transparent !important;
+}
+
 .fgr-ts-detail-head {
     display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-    margin-bottom: 25px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 700px;
+    margin: 0 0 25px;
 }
 
 .fgr-ts-detail-head h2 {
     margin: 0;
+    font-size: 1.5rem !important;
 }
 
 .fgr-ts-thread {
@@ -181,8 +265,8 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 
 .fgr-ts-message--own {
     align-self: flex-end;
-    background: var(--primaryColor);
-    color: var(--lightColor);
+    background: #f7f7f7;
+    color: var(--darkColor);
 }
 
 .fgr-ts-message-meta {
@@ -197,6 +281,19 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 .fgr-ts-message-body p:first-child { margin-top: 0; }
 .fgr-ts-message-body p:last-child { margin-bottom: 0; }
 
+.fgr-ts-message-body p {
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+    margin: 0 0 12px !important;
+}
+
+.fgr-ts-message-body,
+.fgr-ts-message-body p,
+.fgr-ts-message-body a {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
 .fgr-ts-attachments {
     margin: 10px 0 0;
     padding-left: 18px;
@@ -204,7 +301,7 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 }
 
 .fgr-ts-message--own .fgr-ts-attachments a {
-    color: var(--lightColor) !important;
+    color: var(--darkColor) !important;
 }
 
 .fgr-ts-form {
@@ -224,16 +321,20 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     border-bottom: 3px solid var(--darkColor);
     background: transparent;
     padding: 10px 10px 10px 0;
-    margin-bottom: 20px;
+    margin: 0 15px 20px 0;
     font: normal 400 var(--paragraphs, 1.25rem) aktiv-grotesk, sans-serif;
-    width: 100%;
+    width: calc(100% - 15px);
 }
 
 .fgr-ts-form input[type="file"] {
     margin-bottom: 20px;
 }
 
+
 .fgr-ts-gdpr label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     font-weight: 400;
     text-transform: none;
     font-size: var(--smallFS, 0.75rem);
@@ -241,9 +342,80 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 }
 
 .fgr-ts-gdpr input[type="checkbox"] {
+    flex: 0 0 auto;
     border-color: var(--darkColor) !important;
-    margin-right: 10px;
-    vertical-align: top;
+    margin: 2px 0 0;
+}
+
+/* <button> statt <input type="submit">: ::before/::after (für den
+   animierten Hover wie bei .cta-primary/.cta-tabs) werden auf <input>
+   von Browsern nicht gerendert, da es ein "replaced element" ist. */
+.fgr-ts-submit {
+    align-self: flex-start;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    border-style: solid !important;
+    border-width: 3px !important;
+    border-top-color: var(--darkColor) !important;
+    border-right-color: var(--darkColor) !important;
+    border-bottom-color: transparent !important;
+    border-left-color: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    color: var(--darkColor) !important;
+    width: auto !important;
+    font: 800 normal var(--ctaPrimaryFS, 1.125rem) aktiv-grotesk, sans-serif !important;
+    padding: var(--buttonPadding, 15px 35px) !important;
+    margin-top: 10px !important;
+    border-radius: 0;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.125s linear;
+}
+
+.fgr-ts-submit:before {
+    content: "";
+    display: block;
+    height: 0;
+    width: 3px;
+    background: var(--primaryColor);
+    transition: height 0.125s linear;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.fgr-ts-submit:after {
+    content: "";
+    display: block;
+    height: 3px;
+    width: 0;
+    background: var(--primaryColor);
+    transition: width 0.125s linear;
+    position: absolute;
+    right: -3px;
+    bottom: 0;
+}
+
+.fgr-ts-submit:hover:before {
+    height: 100%;
+}
+
+.fgr-ts-submit:hover:after {
+    width: 100%;
+}
+
+.fgr-ts-submit:hover {
+    border-color: transparent !important;
+    color: var(--primaryColor) !important;
+    transition: border-color 0.25s linear !important;
+}
+
+.fgr-ts-submit:active {
+    background: var(--primaryColor) !important;
+    color: var(--lightColor) !important;
 }
 
 .fgr-ts-error {
@@ -255,11 +427,21 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     text-align: center;
 }
 
+.fgr-ts-login-message {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+}
+
 .fgr-ts-login-prompt .cta-primary {
     margin: var(--outerMargin) auto 0;
 }
 
 .fgr-ts-register-hint {
     margin-top: 20px !important;
-    font-size: var(--smallFS, 0.75rem);
+    font-size: 14px !important;
+}
+
+.fgr-ts-register-hint a {
+    font-weight: 700 !important;
+    text-decoration: underline !important;
 }

@@ -162,4 +162,21 @@ class FGR_TS_Ticket {
         }
         return $wpdb->get_results( $sql, ARRAY_A );
     }
+
+    /**
+     * Nachrichtentext fürs Anzeigen aufbereiten. Mehrfache Leerzeilen
+     * (3+ Zeilenumbrüche hintereinander, häufig in migrierten/eingefügten
+     * Texten) werden auf einen normalen Absatzumbruch reduziert - sonst
+     * erzeugt wpautop() dafür einen zusätzlichen leeren Absatz, der mit
+     * dem globalen Theme-Absatzabstand (30px) riesige Lücken reißt.
+     */
+    public static function format_body( string $body ): string {
+        $body = preg_replace( '/\n{3,}/', "\n\n", trim( $body ) );
+        $html = wp_kses_post( wpautop( $body ) );
+        // Manche (v.a. migrierte) Nachrichten haben bereits fertiges HTML
+        // mit leeren Absätzen (<p>&nbsp;</p>) statt reiner Textzeilen -
+        // die obige Zeilen-Normalisierung greift dann nicht, also zur
+        // Sicherheit auch leere Absätze im Ergebnis-HTML entfernen.
+        return preg_replace( '/<p>(\s|&nbsp;|&#160;)*<\/p>/i', '', $html );
+    }
 }

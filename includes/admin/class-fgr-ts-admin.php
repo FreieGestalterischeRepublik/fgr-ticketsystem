@@ -18,6 +18,26 @@ class FGR_TS_Admin {
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue' ] );
         add_action( 'admin_post_fgr_ts_reply', [ $this, 'handle_reply' ] );
         add_action( 'admin_post_fgr_ts_update', [ $this, 'handle_update' ] );
+        add_action( 'admin_init', [ $this, 'maybe_redirect_customer' ] );
+    }
+
+    /**
+     * Kunden landen (per "read"-Capability) ebenfalls auf diesem Menüpunkt
+     * im wp-admin - statt eines Fehlers bekommen sie einfach ihr eigenes
+     * Ticket-Portal im Frontend gezeigt. Muss auf admin_init passieren,
+     * NICHT erst im render()-Callback: admin.php hat zu dem Zeitpunkt
+     * schon Header/Menü ausgegeben, ein redirect() dort bleibt wirkungslos
+     * (leere Seite statt Weiterleitung).
+     */
+    public function maybe_redirect_customer(): void {
+        if ( ( $_GET['page'] ?? '' ) !== self::PAGE_SLUG ) {
+            return;
+        }
+        if ( FGR_TS_Capabilities::is_agent( get_current_user_id() ) ) {
+            return;
+        }
+        wp_safe_redirect( get_permalink( (int) get_option( 'fgr_ts_portal_page_id', 0 ) ) ?: home_url( '/' ) );
+        exit;
     }
 
     public function add_menu(): void {
@@ -42,10 +62,16 @@ class FGR_TS_Admin {
         wp_enqueue_style( 'fgr-ts-admin', FGR_TS_URL . 'assets/css/admin.css', [], FGR_TS_VERSION );
     }
 
+    /**
+     * Kunden landen (per "read"-Capability) ebenfalls auf diesem Menüpunkt
+     * im wp-admin - statt eines Fehlers bekommen sie einfach ihr eigenes
+     * Ticket-Portal im Frontend gezeigt.
+     */
     private function require_agent(): int {
         $user_id = get_current_user_id();
         if ( ! FGR_TS_Capabilities::is_agent( $user_id ) ) {
-            wp_die( 'Keine Berechtigung für diese Seite.' );
+            wp_safe_redirect( get_permalink( (int) get_option( 'fgr_ts_portal_page_id', 0 ) ) ?: home_url( '/' ) );
+            exit;
         }
         return $user_id;
     }
@@ -201,7 +227,7 @@ class FGR_TS_Admin {
                             <?php if ( 'note' === $th['type'] ) : ?><span class="fgr-ts-note-label">Interne Notiz</span><?php endif; ?>
                             <span class="fgr-ts-message-date"><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
                         </div>
-                        <div class="fgr-ts-message-body"><?php echo wp_kses_post( wpautop( $th['body'] ) ); ?></div>
+                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
                         <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
                             <ul class="fgr-ts-attachments">
                                 <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>

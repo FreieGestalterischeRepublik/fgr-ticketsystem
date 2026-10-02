@@ -20,8 +20,26 @@ class FGR_TS_Frontend {
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue' ] );
         add_action( 'admin_post_fgr_ts_create', [ $this, 'handle_create' ] );
         add_action( 'admin_post_fgr_ts_frontend_reply', [ $this, 'handle_reply' ] );
+        add_action( 'admin_post_fgr_ts_set_status', [ $this, 'handle_set_status' ] );
         add_action( 'admin_post_nopriv_fgr_ts_register', [ $this, 'handle_register' ] );
         add_action( 'admin_post_fgr_ts_register', [ $this, 'handle_register' ] );
+        add_filter( 'login_redirect', [ $this, 'login_redirect' ], 10, 3 );
+    }
+
+    /**
+     * Kunden landen nach dem Login direkt im Ticket-Portal statt im
+     * wp-admin-Dashboard. Das Login-Formular trägt als Default-Ziel
+     * unsichtbar admin_url() ein, auch wenn kein redirect_to in der URL
+     * stand - "leer" allein reicht als Check also nicht, es wird explizit
+     * auf ein wp-admin-Ziel geprüft.
+     */
+    public function login_redirect( string $redirect_to, string $requested_redirect_to, $user ) {
+        if ( $user instanceof WP_User && ! FGR_TS_Capabilities::is_agent( $user->ID ) ) {
+            if ( empty( $requested_redirect_to ) || false !== strpos( $requested_redirect_to, '/wp-admin' ) ) {
+                return $this->portal_url();
+            }
+        }
+        return $redirect_to;
     }
 
     public function enqueue(): void {
@@ -30,7 +48,10 @@ class FGR_TS_Frontend {
         // bekannten Portal-Seite laden.
         $portal_page_id = (int) get_option( 'fgr_ts_portal_page_id', 0 );
         if ( $portal_page_id && is_page( $portal_page_id ) ) {
-            wp_enqueue_style( 'fgr-ts-frontend', FGR_TS_URL . 'assets/css/frontend.css', [], FGR_TS_VERSION );
+            // WP_DEBUG lokal: immer frisch laden statt gecachter Version,
+            // sonst sieht man CSS-Änderungen im Browser nicht sofort.
+            $css_version = WP_DEBUG ? (string) filemtime( FGR_TS_DIR . 'assets/css/frontend.css' ) : FGR_TS_VERSION;
+            wp_enqueue_style( 'fgr-ts-frontend', FGR_TS_URL . 'assets/css/frontend.css', [], $css_version );
         }
     }
 
@@ -40,6 +61,9 @@ class FGR_TS_Frontend {
                 ob_start();
                 $this->render_register_form();
                 return ob_get_clean();
+            }
+            if ( isset( $_GET['view'] ) && 'check-email' === $_GET['view'] ) {
+                return $this->render_check_email();
             }
             return $this->render_login_prompt();
         }
@@ -63,9 +87,29 @@ class FGR_TS_Frontend {
         ob_start();
         ?>
         <div id="fgr_ts_portal" class="fgr-ts-portal fgr-ts-login-prompt">
-            <p>Um Tickets zu sehen oder zu erstellen, melde dich bitte an.</p>
+            <?php if ( ! empty( $_GET['confirm_error'] ) ) : ?>
+                <p class="fgr-ts-error">
+                    <?php if ( 'expired' === $_GET['confirm_error'] ) : ?>
+                        Der Bestätigungslink ist abgelaufen (nach 30 Minuten) und das Konto wurde entfernt. Bitte registriere dich erneut.
+                    <?php else : ?>
+                        Dieser Bestätigungslink ist ungültig oder wurde bereits verwendet.
+                    <?php endif; ?>
+                </p>
+            <?php endif; ?>
+            <p class="fgr-ts-login-message">Um Tickets zu sehen oder zu erstellen, melde dich bitte an.</p>
             <a class="cta-primary" href="<?php echo esc_url( wp_login_url( get_permalink() ) ); ?>"><span>Anmelden</span></a>
             <p class="fgr-ts-register-hint">Noch kein Konto? <a href="<?php echo esc_url( $this->portal_url( [ 'view' => 'register' ] ) ); ?>">Jetzt registrieren</a></p>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    private function render_check_email(): string {
+        ob_start();
+        ?>
+        <div id="fgr_ts_portal" class="fgr-ts-portal fgr-ts-login-prompt">
+            <p class="fgr-ts-login-message">Fast geschafft!</p>
+            <p>Wir haben dir eine E-Mail mit einem Bestätigungslink geschickt. Bitte klicke den Link an, um dein Konto zu aktivieren - er ist 30 Minuten gültig.</p>
         </div>
         <?php
         return ob_get_clean();
@@ -74,14 +118,14 @@ class FGR_TS_Frontend {
     private function render_register_form(): void {
         ?>
         <div id="fgr_ts_portal" class="fgr-ts-portal">
-            <p><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Anmeldung</a></p>
+            <p class="fgr-ts-back-link"><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Anmeldung</a></p>
             <h2>Konto erstellen</h2>
 
             <?php if ( ! empty( $_GET['error'] ) ) : ?>
                 <p class="fgr-ts-error"><?php echo esc_html( wp_unslash( $_GET['error'] ) ); ?></p>
             <?php endif; ?>
 
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-form">
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-form fgr-ts-register-form">
                 <?php wp_nonce_field( 'fgr_ts_register', 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_register">
 
@@ -100,11 +144,11 @@ class FGR_TS_Frontend {
                 <p class="fgr-ts-gdpr">
                     <label>
                         <input type="checkbox" name="gdpr_consent" value="1" required>
-                        <?php echo wp_kses_post( get_option( 'fgr_ts_gdpr_text', FGR_TS_DB::default_gdpr_text() ) ); ?>
+                        <span><?php echo wp_kses_post( get_option( 'fgr_ts_gdpr_text', FGR_TS_DB::default_gdpr_text() ) ); ?></span>
                     </label>
                 </p>
 
-                <input type="submit" value="Konto erstellen">
+                <button type="submit" class="fgr-ts-submit">Konto erstellen</button>
             </form>
         </div>
         <?php
@@ -151,10 +195,11 @@ class FGR_TS_Frontend {
             exit;
         }
 
-        wp_set_current_user( $user_id );
-        wp_set_auth_cookie( $user_id );
+        // Double-Opt-in: Konto ist erstmal gesperrt, bis der Link in der
+        // Bestätigungs-Mail angeklickt wurde (siehe FGR_TS_Registration).
+        FGR_TS_Registration::register_pending( $user_id );
 
-        wp_safe_redirect( $this->portal_url() );
+        wp_safe_redirect( $this->portal_url( [ 'view' => 'check-email' ] ) );
         exit;
     }
 
@@ -188,20 +233,20 @@ class FGR_TS_Frontend {
                 <a class="cta-tabs <?php echo empty( $_GET['status'] ) ? 'active' : ''; ?>" href="<?php echo esc_url( $this->portal_url() ); ?>">Alle</a>
                 <?php foreach ( $statuses as $s ) : ?>
                     <a class="cta-tabs <?php echo ( isset( $_GET['status'] ) && (int) $_GET['status'] === (int) $s['id'] ) ? 'active' : ''; ?>"
-                       href="<?php echo esc_url( $this->portal_url( [ 'status' => $s['id'] ] ) ); ?>"><?php echo esc_html( $s['name'] ); ?></a>
+                       href="<?php echo esc_url( $this->portal_url( [ 'status' => $s['id'] ] ) ); ?>"><?php echo esc_html( $this->display_status_name( $s['name'] ) ); ?></a>
                 <?php endforeach; ?>
             </div>
 
             <div class="fgr-ts-ticket-list">
                 <?php if ( ! $tickets ) : ?>
-                    <p>Keine Tickets gefunden.</p>
+                    <p>Keine Tickets gefunden. <a href="<?php echo esc_url( $this->portal_url( [ 'view' => 'new' ] ) ); ?>">Erstelle jetzt Dein erstes Ticket!</a></p>
                 <?php endif; ?>
                 <?php foreach ( $tickets as $t ) :
                     $status = $status_by_id[ (int) $t['status_id'] ] ?? null;
                     ?>
                     <a class="fgr-ts-ticket-row" href="<?php echo esc_url( $this->portal_url( [ 'ticket' => $t['id'] ] ) ); ?>">
                         <span class="fgr-ts-ticket-subject">#<?php echo (int) $t['id']; ?> &ndash; <?php echo esc_html( $t['subject'] ); ?></span>
-                        <span class="fgr-ts-badge" style="color:<?php echo esc_attr( $status['color'] ?? '' ); ?>;background:<?php echo esc_attr( $status['bg_color'] ?? '' ); ?>;"><?php echo esc_html( $status['name'] ?? '' ); ?></span>
+                        <span class="fgr-ts-badge" style="color:<?php echo esc_attr( $status['color'] ?? '' ); ?>;background:<?php echo esc_attr( $status['bg_color'] ?? '' ); ?>;"><?php echo esc_html( $status ? $this->display_status_name( $status['name'] ) : '' ); ?></span>
                         <span class="fgr-ts-ticket-date"><?php echo esc_html( $this->format_date( $t['date_updated'] ) ); ?></span>
                     </a>
                 <?php endforeach; ?>
@@ -217,7 +262,7 @@ class FGR_TS_Frontend {
         $categories = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'categories' ) . ' ORDER BY sort_order', ARRAY_A );
         ?>
         <div id="fgr_ts_portal" class="fgr-ts-portal">
-            <p><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Übersicht</a></p>
+            <p class="fgr-ts-back-link"><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Übersicht</a></p>
             <h2>Neues Ticket erstellen</h2>
 
             <?php if ( ! empty( $_GET['error'] ) ) : ?>
@@ -239,7 +284,7 @@ class FGR_TS_Frontend {
                 </select>
 
                 <label for="fgr-ts-body">Beschreibung</label>
-                <textarea id="fgr-ts-body" name="body" required></textarea>
+                <textarea id="fgr-ts-body" name="body" required placeholder="Bitte beschreibe dein Anliegen möglichst genau. Ein Screenshot des Fehlers oder die genaue Fehlermeldung sind dabei sehr hilfreich – idealerweise ergänzt um einen Link zur betroffenen Seite."></textarea>
 
                 <label for="fgr-ts-attachments">Anhänge (max. 20 MB pro Datei)</label>
                 <input type="file" id="fgr-ts-attachments" name="attachments[]" multiple>
@@ -247,11 +292,11 @@ class FGR_TS_Frontend {
                 <p class="fgr-ts-gdpr">
                     <label>
                         <input type="checkbox" name="gdpr_consent" value="1" required>
-                        <?php echo wp_kses_post( get_option( 'fgr_ts_gdpr_text', FGR_TS_DB::default_gdpr_text() ) ); ?>
+                        <span><?php echo wp_kses_post( get_option( 'fgr_ts_gdpr_text', FGR_TS_DB::default_gdpr_text() ) ); ?></span>
                     </label>
                 </p>
 
-                <input type="submit" value="Ticket absenden">
+                <button type="submit" class="fgr-ts-submit">Ticket absenden</button>
             </form>
         </div>
         <?php
@@ -302,10 +347,10 @@ class FGR_TS_Frontend {
         $is_agent    = FGR_TS_Capabilities::is_agent( $user_id );
         ?>
         <div id="fgr_ts_portal" class="fgr-ts-portal">
-            <p><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Übersicht</a></p>
+            <span class="fgr-ts-badge" style="color:<?php echo esc_attr( $status['color'] ?? '' ); ?>;background:<?php echo esc_attr( $status['bg_color'] ?? '' ); ?>;"><?php echo esc_html( $status ? $this->display_status_name( $status['name'] ) : '' ); ?></span>
+            <p class="fgr-ts-back-link"><a href="<?php echo esc_url( $this->portal_url() ); ?>">&larr; Zurück zur Übersicht</a></p>
             <div class="fgr-ts-detail-head">
                 <h2>#<?php echo (int) $ticket['id']; ?> &ndash; <?php echo esc_html( $ticket['subject'] ); ?></h2>
-                <span class="fgr-ts-badge" style="color:<?php echo esc_attr( $status['color'] ?? '' ); ?>;background:<?php echo esc_attr( $status['bg_color'] ?? '' ); ?>;"><?php echo esc_html( $status['name'] ?? '' ); ?></span>
             </div>
 
             <div class="fgr-ts-thread">
@@ -317,7 +362,7 @@ class FGR_TS_Frontend {
                             <strong><?php echo esc_html( 'agent' === $th['author_role'] ? 'FGR' : ( $is_own ? 'Du' : '–' ) ); ?></strong>
                             <span><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
                         </div>
-                        <div class="fgr-ts-message-body"><?php echo wp_kses_post( wpautop( $th['body'] ) ); ?></div>
+                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
                         <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
                             <ul class="fgr-ts-attachments">
                                 <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
@@ -329,7 +374,20 @@ class FGR_TS_Frontend {
                 <?php endforeach; ?>
             </div>
 
-            <?php if ( ! $status['is_closed'] || $is_agent ) : ?>
+            <?php if ( $status['is_closed'] ?? false ) : ?>
+                <p class="fgr-ts-closed-note">Dieses Ticket ist geschlossen, du kannst aber weiterhin antworten.</p>
+            <?php endif; ?>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-status-actions">
+                <?php wp_nonce_field( 'fgr_ts_set_status_' . $ticket_id, 'fgr_ts_nonce' ); ?>
+                <input type="hidden" name="action" value="fgr_ts_set_status">
+                <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
+                <?php foreach ( [ 'offen' => 'Ticket öffnen', 'In Wartestellung' => 'Auf Wartestellung setzen', 'geschlossen' => 'Ticket schließen' ] as $target => $label ) : ?>
+                    <button type="submit" name="status_name" value="<?php echo esc_attr( $target ); ?>"
+                        class="cta-tabs<?php echo ( $status && $status['name'] === $target ) ? ' active' : ''; ?>"><?php echo esc_html( $label ); ?></button>
+                <?php endforeach; ?>
+            </form>
+
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" class="fgr-ts-form">
                 <?php wp_nonce_field( 'fgr_ts_frontend_reply_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_frontend_reply">
@@ -341,11 +399,8 @@ class FGR_TS_Frontend {
                 <label for="fgr-ts-reply-attachments">Anhänge (max. 20 MB pro Datei)</label>
                 <input type="file" id="fgr-ts-reply-attachments" name="attachments[]" multiple>
 
-                <input type="submit" value="Antwort senden">
+                <button type="submit" class="fgr-ts-submit">Antwort senden</button>
             </form>
-            <?php else : ?>
-                <p>Dieses Ticket ist geschlossen.</p>
-            <?php endif; ?>
         </div>
         <?php
     }
@@ -378,6 +433,35 @@ class FGR_TS_Frontend {
         exit;
     }
 
+    /**
+     * Status-Wechsel durch den Kunden (oder Agenten) direkt im Frontend -
+     * bewusst nur die drei "groben" Zustände, nicht die internen
+     * Konversations-Status (die laufen automatisch über Antworten, siehe
+     * FGR_TS_Ticket::auto_advance_status()).
+     */
+    public function handle_set_status(): void {
+        if ( ! is_user_logged_in() ) {
+            wp_die( 'Bitte zuerst anmelden.' );
+        }
+        $user_id   = get_current_user_id();
+        $ticket_id = (int) ( $_POST['ticket_id'] ?? 0 );
+        check_admin_referer( 'fgr_ts_set_status_' . $ticket_id, 'fgr_ts_nonce' );
+
+        $ticket = FGR_TS_Ticket::get( $ticket_id );
+        if ( ! $ticket || ! FGR_TS_Capabilities::can_view_ticket( $user_id, $ticket ) ) {
+            wp_die( 'Keine Berechtigung.' );
+        }
+
+        $allowed = [ 'offen', 'geschlossen', 'In Wartestellung' ];
+        $status_name = sanitize_text_field( wp_unslash( $_POST['status_name'] ?? '' ) );
+        if ( in_array( $status_name, $allowed, true ) ) {
+            FGR_TS_Ticket::set_status_by_name( $ticket_id, $status_name );
+        }
+
+        wp_safe_redirect( $this->portal_url( [ 'ticket' => $ticket_id ] ) );
+        exit;
+    }
+
     // ---------------------------------------------------------------------
 
     private function attachments_by_thread( int $ticket_id ): array {
@@ -390,6 +474,19 @@ class FGR_TS_Frontend {
             $out[ (int) $row['thread_id'] ][] = $row;
         }
         return $out;
+    }
+
+    /**
+     * Kundenfreundlichere Formulierung für den Status - nur die
+     * Anzeige im Frontend, der Name in der Datenbank bleibt
+     * "Warten auf Kundenantwort" (wird für die Status-Automatik in
+     * FGR_TS_Ticket::auto_advance_status() über den Namen abgeglichen).
+     */
+    private function display_status_name( string $name ): string {
+        $map = [
+            'Warten auf Kundenantwort' => 'Wir warten auf Deine Antwort',
+        ];
+        return $map[ $name ] ?? $name;
     }
 
     private function format_date( ?string $mysql_date ): string {
