@@ -43,7 +43,12 @@ class FGR_TS_Ticket {
         ] );
         $ticket_id = (int) $wpdb->insert_id;
 
-        self::add_thread( $ticket_id, 'message', $customer_id, 'customer', $body, $ip_address );
+        // $trigger_reply_events = false: die erste Nachricht eines Tickets ist
+        // die Beschreibung, keine "Antwort" - sonst würde der Status sofort
+        // automatisch auf "Warten auf FGR-Antwort" vorrücken und zusätzlich zu
+        // "Neues Ticket" noch eine (inhaltslose) "Kunde hat geantwortet"-Mail
+        // an alle Agenten gehen (siehe FGR_TS_Notifications::on_ticket_replied()).
+        self::add_thread( $ticket_id, 'message', $customer_id, 'customer', $body, $ip_address, false );
 
         do_action( 'fgr_ts_ticket_created', $ticket_id );
 
@@ -56,7 +61,7 @@ class FGR_TS_Ticket {
      * Planungs-Notizen: Kundenantwort -> "Warten auf FGR-Antwort",
      * Agentenantwort -> "Warten auf Kundenantwort").
      */
-    public static function add_thread( int $ticket_id, string $type, ?int $author_id, string $author_role, string $body, ?string $ip_address = null ): int {
+    public static function add_thread( int $ticket_id, string $type, ?int $author_id, string $author_role, string $body, ?string $ip_address = null, bool $trigger_reply_events = true ): int {
         global $wpdb;
 
         $wpdb->insert( self::table( 'threads' ), [
@@ -72,7 +77,7 @@ class FGR_TS_Ticket {
 
         $wpdb->update( self::table( 'tickets' ), [ 'date_updated' => current_time( 'mysql' ) ], [ 'id' => $ticket_id ] );
 
-        if ( 'message' === $type && in_array( $author_role, [ 'customer', 'agent' ], true ) ) {
+        if ( $trigger_reply_events && 'message' === $type && in_array( $author_role, [ 'customer', 'agent' ], true ) ) {
             self::auto_advance_status( $ticket_id, $author_role );
             do_action( 'fgr_ts_ticket_replied', $ticket_id, $author_role, $thread_id );
         }
@@ -159,6 +164,12 @@ class FGR_TS_Ticket {
     public static function get( int $ticket_id ): ?array {
         global $wpdb;
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . self::table( 'tickets' ) . " WHERE id = %d", $ticket_id ), ARRAY_A );
+        return $row ?: null;
+    }
+
+    public static function get_thread( int $thread_id ): ?array {
+        global $wpdb;
+        $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . self::table( 'threads' ) . " WHERE id = %d", $thread_id ), ARRAY_A );
         return $row ?: null;
     }
 

@@ -341,10 +341,41 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     line-height: 1.5;
 }
 
+/* Eigene Checkbox statt nativer Darstellung: der native "checked"-Zustand
+   (Browser-Standard-Haken) war kaum von unchecked zu unterscheiden, da
+   Füllfarbe und Rahmenfarbe identisch sind - jetzt ein deutlich sichtbarer
+   weißer Haken auf dunklem Grund. */
 .fgr-ts-gdpr input[type="checkbox"] {
-    flex: 0 0 auto;
-    border-color: var(--darkColor) !important;
-    margin: 2px 0 0;
+    flex: 0 0 auto !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 18px !important;
+    height: 18px !important;
+    margin: 2px 0 0 !important;
+    padding: 0 !important;
+    border: 3px solid var(--darkColor) !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+    position: relative !important;
+    cursor: pointer;
+    transition: var(--colortransition);
+}
+
+.fgr-ts-gdpr input[type="checkbox"]:checked {
+    background-color: var(--darkColor) !important;
+}
+
+.fgr-ts-gdpr input[type="checkbox"]:checked::after {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    left: 4px;
+    top: 0px;
+    width: 4px;
+    height: 9px;
+    border: solid var(--lightColor, #fff);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
 }
 
 /* <button> statt <input type="submit">: ::before/::after (für den
