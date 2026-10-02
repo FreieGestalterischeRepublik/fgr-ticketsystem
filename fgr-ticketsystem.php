@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:  FGR Ticketsystem
- * Description:  Eigenes Support-Ticketsystem für die Freie Gestalterische Republik, als Ersatz für SupportCandy. Werbefrei.
+ * Description:  Eigenes Support-Ticketsystem für die Freie Gestalterische Republik. Werbefrei.
  * Version:      1.1.0
  * Author:       Freie Gestalterische Republik
  * Author URI:   https://fgr.design
