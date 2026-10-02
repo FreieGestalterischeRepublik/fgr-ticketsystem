@@ -311,8 +311,8 @@ body.page-id-462 .col-lg-9.col-xl-6 {
 .fgr-ts-thread {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    margin-top: 50px;
+    gap: 50px;
+    margin-top: 80px;
     margin-bottom: 30px;
 }
 
