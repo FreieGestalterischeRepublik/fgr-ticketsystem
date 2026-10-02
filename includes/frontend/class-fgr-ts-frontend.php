@@ -362,27 +362,6 @@ class FGR_TS_Frontend {
                 <h2>#<?php echo (int) $ticket['id']; ?> &ndash; <?php echo esc_html( $ticket['subject'] ); ?></h2>
             </div>
 
-            <div class="fgr-ts-thread">
-                <?php foreach ( $threads as $th ) :
-                    $is_own = (int) $th['author_id'] === $user_id;
-                    ?>
-                    <div class="fgr-ts-message <?php echo $is_own ? 'fgr-ts-message--own' : 'fgr-ts-message--other'; ?>">
-                        <div class="fgr-ts-message-meta">
-                            <strong><?php echo esc_html( 'agent' === $th['author_role'] ? 'FGR' : ( $is_own ? 'Du' : '–' ) ); ?></strong>
-                            <span><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
-                        </div>
-                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
-                        <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
-                            <ul class="fgr-ts-attachments">
-                                <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
-                                    <li><a href="<?php echo esc_url( content_url( 'uploads' . $att['file_path'] ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
             <?php if ( $status['is_closed'] ?? false ) : ?>
                 <p class="fgr-ts-closed-note">Dieses Ticket ist geschlossen, du kannst aber weiterhin antworten.</p>
             <?php endif; ?>
@@ -410,6 +389,28 @@ class FGR_TS_Frontend {
 
                 <button type="submit" class="fgr-ts-submit">Antwort senden</button>
             </form>
+
+            <!-- Wie im Backend: neueste Nachricht oben, älteste unten. -->
+            <div class="fgr-ts-thread">
+                <?php foreach ( array_reverse( $threads ) as $th ) :
+                    $is_own = (int) $th['author_id'] === $user_id;
+                    ?>
+                    <div class="fgr-ts-message <?php echo $is_own ? 'fgr-ts-message--own' : 'fgr-ts-message--other'; ?>">
+                        <div class="fgr-ts-message-meta">
+                            <strong><?php echo esc_html( 'agent' === $th['author_role'] ? 'FGR' : ( $is_own ? 'Du' : '–' ) ); ?></strong>
+                            <span><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
+                        </div>
+                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
+                        <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
+                            <ul class="fgr-ts-attachments">
+                                <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
+                                    <li><a href="<?php echo esc_url( content_url( 'uploads' . $att['file_path'] ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         </div>
         <?php
     }
