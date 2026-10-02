@@ -277,6 +277,23 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     transition: border-color 0.25s linear !important;
 }
 
+/* Button für den aktuell aktiven Status ergibt keinen Sinn zum Klicken
+   (Ticket ist ja schon "offen"/"geschlossen"/...) - ausgegraut und per
+   :disabled nicht mehr klickbar, auch kein Hover-Effekt mehr. */
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    border-top-color: var(--darkColor) !important;
+    border-right-color: var(--darkColor) !important;
+    color: var(--darkColor) !important;
+}
+
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:disabled:hover:before,
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:disabled:hover:after {
+    height: 0;
+    width: 0;
+}
+
 .fgr-ts-detail-head {
     display: flex;
     flex-direction: column;

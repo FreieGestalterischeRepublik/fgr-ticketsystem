@@ -370,9 +370,11 @@ class FGR_TS_Frontend {
                 <?php wp_nonce_field( 'fgr_ts_set_status_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_set_status">
                 <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
-                <?php foreach ( [ 'offen' => 'Ticket öffnen', 'In Wartestellung' => 'Auf Wartestellung setzen', 'geschlossen' => 'Ticket schließen' ] as $target => $label ) : ?>
+                <?php foreach ( [ 'offen' => 'Ticket öffnen', 'In Wartestellung' => 'Auf Wartestellung setzen', 'geschlossen' => 'Ticket schließen' ] as $target => $label ) :
+                    $is_current = $status && $status['name'] === $target;
+                    ?>
                     <button type="submit" name="status_name" value="<?php echo esc_attr( $target ); ?>"
-                        class="cta-tabs<?php echo ( $status && $status['name'] === $target ) ? ' active' : ''; ?>"><?php echo esc_html( $label ); ?></button>
+                        class="cta-tabs<?php echo $is_current ? ' active' : ''; ?>" <?php disabled( $is_current ); ?>><?php echo esc_html( $label ); ?></button>
                 <?php endforeach; ?>
             </form>
 
