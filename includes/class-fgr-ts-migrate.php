@@ -108,7 +108,11 @@ class FGR_TS_Migrate {
                 continue;
             }
 
-            $author_id = $th['customer'] ? (int) $th['customer'] : null;
+            // Wichtig: threads.customer ist eine psmsc_customers.id, KEINE
+            // wp_users.ID - auch bei Agenten-Antworten (Agenten haben
+            // ebenfalls einen customer-Datensatz). Muss also genauso über
+            // $customer_user_map aufgelöst werden wie bei Tickets.
+            $author_id = $th['customer'] ? ( $customer_user_map[ (int) $th['customer'] ] ?? null ) : null;
             if ( ! $author_id ) {
                 $author_role = 'system';
             } elseif ( in_array( $author_id, $agent_ids, true ) ) {

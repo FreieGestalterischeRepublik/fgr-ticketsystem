@@ -39,6 +39,7 @@ require_once FGR_TS_DIR . 'includes/class-fgr-ts-migrate.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-capabilities.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-ticket.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-notifications.php';
+require_once FGR_TS_DIR . 'includes/admin/class-fgr-ts-admin.php';
 
 register_activation_hook( __FILE__, [ 'FGR_TS_DB', 'install' ] );
 
@@ -46,4 +47,5 @@ add_action( 'plugins_loaded', function () {
     FGR_TS_DB::maybe_upgrade();
     new FGR_TS_Migrate();
     new FGR_TS_Notifications();
+    new FGR_TS_Admin();
 } );
