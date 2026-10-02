@@ -3,6 +3,16 @@
    input/textarea-Stile aus style.css) statt eigener Werte, damit sich
    das Portal wie der Rest der Seite anfühlt. */
 
+/* Die Tickets-Seite steckt das Portal in die normale ACF-Textspalte
+   (col-12 col-lg-9 col-xl-6) - gedacht für Fließtext, nicht für eine
+   App-Oberfläche. Dadurch klebt der Inhalt links in einer halbbreiten
+   Spalte mit viel Leerraum rechts. Auf dieser Seite gezielt auf volle
+   Container-Breite ziehen (Seiten-ID 462, siehe fgr_ts_portal_page_id). */
+body.page-id-462 .col-lg-9.col-xl-6 {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+}
+
 /* Die Tickets-Seite bekommt absichtlich kein #content-wrapper (historisch
    für SupportCandy so angelegt), daher greift die Theme-eigene Regel
    ".lightBG #content-wrapper a { color: var(--darkColor) }" hier nicht -
@@ -11,7 +21,11 @@
 #fgr_ts_portal {
     font: normal 400 var(--normalFS, 1rem) aktiv-grotesk, sans-serif;
     color: var(--darkColor);
-    max-width: 900px;
+}
+
+#fgr_ts_portal .fgr-ts-form,
+#fgr_ts_portal .fgr-ts-thread {
+    max-width: 700px;
 }
 
 #fgr_ts_portal a:not(.cta-primary):not(.cta-tabs),
