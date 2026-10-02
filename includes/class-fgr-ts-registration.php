@@ -65,6 +65,26 @@ class FGR_TS_Registration {
         );
     }
 
+    /**
+     * Wird aufgerufen, wenn sich jemand mit einer E-Mail-Adresse registrieren
+     * will, zu der schon ein Konto existiert (siehe FGR_TS_Frontend::
+     * handle_register() - bewusst KEINE Fehlermeldung an den Absender, sonst
+     * ließe sich darüber durchprobieren, welche E-Mail-Adressen ein Konto
+     * haben). Der tatsächliche Kontoinhaber bekommt stattdessen einen
+     * Hinweis, falls der Registrierungsversuch nicht von ihm selbst war.
+     */
+    public static function notify_existing_account( string $email ): void {
+        $user = get_user_by( 'email', $email );
+        if ( ! $user ) {
+            return;
+        }
+        wp_mail(
+            $email,
+            'Registrierungsversuch mit deiner E-Mail-Adresse',
+            "Hallo {$user->display_name},\n\njemand hat versucht, sich mit deiner E-Mail-Adresse neu zu registrieren - du hast aber bereits ein Konto. Falls das du warst, melde dich einfach ganz normal an. Falls du dein Passwort vergessen hast, kannst du es über \"Passwort vergessen\" beim Anmelden zurücksetzen.\n\nFalls du das nicht warst, kannst du diese E-Mail ignorieren - es wurde nichts an deinem Konto verändert."
+        );
+    }
+
     public static function is_pending( int $user_id ): bool {
         return (bool) get_user_meta( $user_id, self::META_PENDING, true );
     }

@@ -172,12 +172,23 @@ class FGR_TS_Frontend {
             $error = 'Das Passwort muss mindestens 12 Zeichen lang sein.';
         } elseif ( ! $consent ) {
             $error = 'Bitte der Datenschutzerklärung zustimmen.';
-        } elseif ( email_exists( $email ) ) {
-            $error = 'Zu dieser E-Mail-Adresse existiert bereits ein Konto. Bitte melde dich stattdessen an.';
         }
 
         if ( $error ) {
             wp_safe_redirect( $this->portal_url( [ 'view' => 'register', 'error' => rawurlencode( $error ), 'name' => rawurlencode( $name ), 'email' => rawurlencode( $email ) ] ) );
+            exit;
+        }
+
+        /*
+         * Existiert die E-Mail bereits, NICHT per Fehlermeldung verraten
+         * (sonst könnte jeder beliebige E-Mail-Adressen durchprobieren und
+         * herausfinden, wer ein Konto hat) - statt einer neuen Registrierung
+         * geht eine Hinweis-Mail an die bestehende Adresse, nach außen sieht
+         * die Antwort exakt wie eine erfolgreiche Neu-Registrierung aus.
+         */
+        if ( email_exists( $email ) ) {
+            FGR_TS_Registration::notify_existing_account( $email );
+            wp_safe_redirect( $this->portal_url( [ 'view' => 'check-email' ] ) );
             exit;
         }
 
