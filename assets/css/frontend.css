@@ -49,6 +49,13 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     opacity: 1;
 }
 
+/* Theme setzt global "textarea { resize: none !important }" (style.css) -
+   im Ticketsystem soll man das Textfeld aber wie gewohnt größer ziehen
+   können, gerade beim Beschreiben eines Problems. */
+#fgr_ts_portal textarea {
+    resize: vertical !important;
+}
+
 #fgr_ts_portal input[type="password"] {
     padding: 7.5px 7.5px 7.5px 0 !important;
     appearance: none !important;
