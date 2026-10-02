@@ -109,7 +109,16 @@ class FGR_TS_DB {
             add_option( 'fgr_ts_portal_page_id', $existing ? $existing->ID : 0 );
         }
 
+        if ( false === get_option( 'fgr_ts_gdpr_text', false ) ) {
+            add_option( 'fgr_ts_gdpr_text', self::default_gdpr_text() );
+        }
+
         update_option( 'fgr_ts_db_version', FGR_TS_DB_VERSION );
+    }
+
+    /** 1:1 der bisherige Text aus den SupportCandy-GDPR-Einstellungen. */
+    public static function default_gdpr_text(): string {
+        return 'Ich willige ein, das die FGR meine personenbezogenen Daten wie Name, E-Mail-Adresse, etc. gemäß Art. 6 Abs 1 lit. a) DSGVO erhoben, gespeichert und verarbeitet werden.';
     }
 
     public static function maybe_upgrade(): void {

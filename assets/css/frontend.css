@@ -1,0 +1,195 @@
+/* Nutzt bewusst die vorhandenen Design-Variablen/Klassen des FGR-Themes
+   (--primaryColor, --darkColor, cta-primary, cta-tabs, globale
+   input/textarea-Stile aus style.css) statt eigener Werte, damit sich
+   das Portal wie der Rest der Seite anfühlt. */
+
+/* Die Tickets-Seite bekommt absichtlich kein #content-wrapper (historisch
+   für SupportCandy so angelegt), daher greift die Theme-eigene Regel
+   ".lightBG #content-wrapper a { color: var(--darkColor) }" hier nicht -
+   Links/strong sind sonst (wie im Rest der Seite) weiß und unsichtbar auf
+   hellem Grund. Deshalb hier explizit mit !important nachgezogen. */
+#fgr_ts_portal {
+    font: normal 400 var(--normalFS, 1rem) aktiv-grotesk, sans-serif;
+    color: var(--darkColor);
+    max-width: 900px;
+}
+
+#fgr_ts_portal a:not(.cta-primary):not(.cta-tabs),
+#fgr_ts_portal strong,
+#fgr_ts_portal p,
+#fgr_ts_portal h2,
+#fgr_ts_portal h3,
+#fgr_ts_portal label {
+    color: var(--darkColor) !important;
+}
+
+#fgr_ts_portal .fgr-ts-message--own strong,
+#fgr_ts_portal .fgr-ts-message--own p,
+#fgr_ts_portal .fgr-ts-message--own a:not(.cta-primary):not(.cta-tabs) {
+    color: var(--lightColor) !important;
+}
+
+#fgr_ts_portal h2 {
+    font: normal 800 var(--tertiaryHead, 2rem) aktiv-grotesk, sans-serif;
+    margin: 0 0 20px;
+}
+
+.fgr-ts-list-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.fgr-ts-list-head .cta-primary {
+    margin-top: 0;
+}
+
+.fgr-ts-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.fgr-ts-tabs .cta-tabs {
+    text-decoration: none;
+}
+
+.fgr-ts-ticket-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.fgr-ts-ticket-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--middleColor);
+    text-decoration: none;
+    color: var(--darkColor);
+}
+
+.fgr-ts-ticket-row:hover {
+    background-color: var(--middleColor);
+}
+
+.fgr-ts-ticket-subject {
+    flex: 1;
+    font-weight: 700;
+}
+
+.fgr-ts-ticket-date {
+    font-size: var(--smallFS, 0.75rem);
+    color: var(--darkColor);
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+.fgr-ts-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    font-size: var(--smallFS, 0.75rem);
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.fgr-ts-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 25px;
+}
+
+.fgr-ts-detail-head h2 {
+    margin: 0;
+}
+
+.fgr-ts-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.fgr-ts-message {
+    max-width: 80%;
+    padding: 15px 20px;
+    background: var(--middleColor);
+}
+
+.fgr-ts-message--own {
+    align-self: flex-end;
+    background: var(--primaryColor);
+    color: var(--lightColor);
+}
+
+.fgr-ts-message-meta {
+    display: flex;
+    gap: 10px;
+    font-size: var(--smallFS, 0.75rem);
+    font-weight: 800;
+    margin-bottom: 8px;
+    opacity: 0.8;
+}
+
+.fgr-ts-message-body p:first-child { margin-top: 0; }
+.fgr-ts-message-body p:last-child { margin-bottom: 0; }
+
+.fgr-ts-attachments {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    font-size: var(--smallFS, 0.75rem);
+}
+
+.fgr-ts-message--own .fgr-ts-attachments a {
+    color: var(--lightColor) !important;
+}
+
+.fgr-ts-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.fgr-ts-form label {
+    font-weight: 800;
+    font-size: var(--smallFS, 0.75rem);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.fgr-ts-form select {
+    border: 0;
+    border-bottom: 3px solid var(--darkColor);
+    background: transparent;
+    padding: 10px 10px 10px 0;
+    margin-bottom: 20px;
+    font: normal 400 var(--paragraphs, 1.25rem) aktiv-grotesk, sans-serif;
+    width: 100%;
+}
+
+.fgr-ts-form input[type="file"] {
+    margin-bottom: 20px;
+}
+
+.fgr-ts-gdpr label {
+    font-weight: 400;
+    text-transform: none;
+    font-size: var(--smallFS, 0.75rem);
+    line-height: 1.5;
+}
+
+.fgr-ts-gdpr input[type="checkbox"] {
+    border-color: var(--darkColor) !important;
+    margin-right: 10px;
+    vertical-align: top;
+}
+
+.fgr-ts-error {
+    color: #c0392b;
+    font-weight: 700;
+}
