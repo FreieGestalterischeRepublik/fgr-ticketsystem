@@ -14,6 +14,10 @@ defined( 'ABSPATH' ) || exit;
  *   (mehrere möglich, siehe FGR_TS_Ticket::set_agents()). Die Spalte
  *   tickets.assigned_agent ist seit Schema-Version 2 ungenutzt (bleibt
  *   nur noch für alte Zeilen stehen, dbDelta entfernt sie nicht).
+ * - fgr_ts_ticket_watchers: weitere bestehende Benutzer, die ein Admin
+ *   zu einem Ticket hinzugefügt hat (z.B. mehrere Ansprechpartner einer
+ *   Firma) - dürfen das Ticket wie der Ersteller sehen und beantworten,
+ *   seit Schema-Version 3.
  */
 class FGR_TS_DB {
 
@@ -93,6 +97,13 @@ class FGR_TS_DB {
             agent_id BIGINT UNSIGNED NOT NULL,
             PRIMARY KEY (ticket_id, agent_id),
             KEY agent_id (agent_id)
+        ) {$charset_collate};
+
+        CREATE TABLE {$p}ticket_watchers (
+            ticket_id BIGINT UNSIGNED NOT NULL,
+            user_id BIGINT UNSIGNED NOT NULL,
+            PRIMARY KEY (ticket_id, user_id),
+            KEY user_id (user_id)
         ) {$charset_collate};
 
         CREATE TABLE {$p}attachments (

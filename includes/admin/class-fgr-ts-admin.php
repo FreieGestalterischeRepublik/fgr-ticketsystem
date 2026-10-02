@@ -19,6 +19,9 @@ class FGR_TS_Admin {
         add_action( 'admin_post_fgr_ts_reply', [ $this, 'handle_reply' ] );
         add_action( 'admin_post_fgr_ts_update', [ $this, 'handle_update' ] );
         add_action( 'admin_post_fgr_ts_bulk', [ $this, 'handle_bulk' ] );
+        add_action( 'admin_post_fgr_ts_edit_thread', [ $this, 'handle_edit_thread' ] );
+        add_action( 'admin_post_fgr_ts_add_watcher', [ $this, 'handle_add_watcher' ] );
+        add_action( 'admin_post_fgr_ts_remove_watcher', [ $this, 'handle_remove_watcher' ] );
         add_action( 'admin_init', [ $this, 'maybe_redirect_customer' ] );
     }
 
@@ -97,6 +100,12 @@ class FGR_TS_Admin {
         if ( ! empty( $_GET['status'] ) ) {
             $filters['status_id'] = (int) $_GET['status'];
         }
+        $current_orderby = in_array( $_GET['orderby'] ?? '', [ 'customer', 'agent' ], true ) ? $_GET['orderby'] : '';
+        $current_order   = 'asc' === strtolower( $_GET['order'] ?? '' ) ? 'asc' : 'desc';
+        if ( $current_orderby ) {
+            $filters['orderby'] = $current_orderby;
+            $filters['order']   = $current_order;
+        }
 
         $tickets   = FGR_TS_Ticket::get_for_user( $user_id, $filters );
         $statuses  = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'statuses' ) . ' ORDER BY sort_order', ARRAY_A );
@@ -144,7 +153,11 @@ class FGR_TS_Admin {
                     <thead>
                         <tr>
                             <td class="manage-column column-cb check-column"><input type="checkbox" id="fgr-ts-select-all"></td>
-                            <th>#</th><th>Betreff</th><th>Kunde</th><th>Status</th><th>Priorität</th><th>Kategorie</th><th>Agent</th><th>Aktualisiert</th>
+                            <th>#</th><th>Betreff</th>
+                            <th><?php echo $this->sortable_column_header( 'Kunde', 'customer', $current_orderby, $current_order ); ?></th>
+                            <th>Status</th><th>Priorität</th><th>Kategorie</th>
+                            <th><?php echo $this->sortable_column_header( 'Agent', 'agent', $current_orderby, $current_order ); ?></th>
+                            <th>Aktualisiert</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -221,12 +234,56 @@ class FGR_TS_Admin {
         $categories = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'categories' ) . ' ORDER BY sort_order', ARRAY_A );
         $agents     = get_users( [ 'meta_key' => 'fgr_ts_is_agent', 'meta_value' => 1 ] );
         $attachments = $this->attachments_by_thread( $ticket_id );
+        $is_admin_tier = FGR_TS_Capabilities::is_admin_tier( $user_id );
         ?>
         <div class="wrap fgr-ts">
             <p><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE_SLUG ) ); ?>">&larr; Zurück zur Übersicht</a></p>
             <h1>#<?php echo (int) $ticket['id']; ?> – <?php echo esc_html( $ticket['subject'] ); ?></h1>
             <p class="description">Kunde: <strong><?php echo esc_html( $customer ? $customer->display_name : '–' ); ?></strong>
                 (<?php echo esc_html( $customer ? $customer->user_email : '–' ); ?>)</p>
+
+            <?php if ( $is_admin_tier ) :
+                $watcher_ids = FGR_TS_Ticket::get_watchers( $ticket_id );
+                ?>
+                <div class="fgr-ts-watchers">
+                    <strong>Weitere Teilnehmer:</strong>
+                    <?php if ( $watcher_ids ) : ?>
+                        <ul class="fgr-ts-watcher-list">
+                            <?php foreach ( $watcher_ids as $watcher_id ) :
+                                $watcher = get_userdata( $watcher_id );
+                                if ( ! $watcher ) {
+                                    continue;
+                                }
+                                ?>
+                                <li>
+                                    <?php echo esc_html( $watcher->display_name . ' (' . $watcher->user_email . ')' ); ?>
+                                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-remove-form">
+                                        <?php wp_nonce_field( 'fgr_ts_remove_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
+                                        <input type="hidden" name="action" value="fgr_ts_remove_watcher">
+                                        <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
+                                        <input type="hidden" name="watcher_id" value="<?php echo (int) $watcher_id; ?>">
+                                        <button type="submit" class="button-link fgr-ts-watcher-remove">entfernen</button>
+                                    </form>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else : ?>
+                        <span class="description"> keine</span>
+                    <?php endif; ?>
+
+                    <?php if ( ! empty( $_GET['watcher_error'] ) ) : ?>
+                        <p class="fgr-ts-watcher-error"><?php echo esc_html( wp_unslash( $_GET['watcher_error'] ) ); ?></p>
+                    <?php endif; ?>
+
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-add-form">
+                        <?php wp_nonce_field( 'fgr_ts_add_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
+                        <input type="hidden" name="action" value="fgr_ts_add_watcher">
+                        <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
+                        <input type="email" name="watcher_email" placeholder="E-Mail eines bestehenden Benutzers">
+                        <button type="submit" class="button">Hinzufügen</button>
+                    </form>
+                </div>
+            <?php endif; ?>
 
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-meta-form">
                 <?php wp_nonce_field( 'fgr_ts_update_' . $ticket_id, 'fgr_ts_nonce' ); ?>
@@ -257,7 +314,7 @@ class FGR_TS_Admin {
                     </select>
                 </label>
 
-                <?php if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) :
+                <?php if ( $is_admin_tier ) :
                     $current_agent_ids = FGR_TS_Ticket::get_agents( $ticket_id );
                     $summary_label     = $current_agent_ids
                         ? sprintf( '%d Agent(en) ausgewählt', count( $current_agent_ids ) )
@@ -296,6 +353,7 @@ class FGR_TS_Admin {
                 <input type="hidden" name="action" value="fgr_ts_reply">
                 <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
                 <h2>Antworten</h2>
+                <?php echo $this->format_toolbar(); ?>
                 <textarea name="body" rows="6" class="large-text" required></textarea>
                 <p>
                     <label><input type="checkbox" name="is_note" value="1"> Interne Notiz (für den Kunden nicht sichtbar)</label>
@@ -339,10 +397,47 @@ class FGR_TS_Admin {
                                 <?php endforeach; ?>
                             </ul>
                         <?php endif; ?>
+                        <?php if ( $is_admin_tier ) : ?>
+                            <details class="fgr-ts-edit-toggle">
+                                <summary>Bearbeiten</summary>
+                                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-edit-form">
+                                    <?php wp_nonce_field( 'fgr_ts_edit_thread_' . $th['id'], 'fgr_ts_nonce' ); ?>
+                                    <input type="hidden" name="action" value="fgr_ts_edit_thread">
+                                    <input type="hidden" name="thread_id" value="<?php echo (int) $th['id']; ?>">
+                                    <?php echo $this->format_toolbar(); ?>
+                                    <textarea name="body" rows="4" class="large-text" required><?php echo esc_textarea( $th['body'] ); ?></textarea>
+                                    <button type="submit" class="button">Speichern</button>
+                                </form>
+                            </details>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
         </div>
+        <script>
+        (function() {
+            document.querySelectorAll( '.fgr-ts-format-toolbar' ).forEach( function( toolbar ) {
+                var textarea = toolbar.nextElementSibling;
+                if ( ! textarea || 'TEXTAREA' !== textarea.tagName ) {
+                    return;
+                }
+                toolbar.querySelectorAll( 'button[data-tag]' ).forEach( function( btn ) {
+                    btn.addEventListener( 'click', function() {
+                        var tag   = btn.getAttribute( 'data-tag' );
+                        var start = textarea.selectionStart;
+                        var end   = textarea.selectionEnd;
+                        var value = textarea.value;
+                        var open  = '<' + tag + '>';
+                        var close = '</' + tag + '>';
+                        textarea.value = value.substring( 0, start ) + open + value.substring( start, end ) + close + value.substring( end );
+                        textarea.focus();
+                        textarea.selectionStart = start + open.length;
+                        textarea.selectionEnd   = end + open.length;
+                    } );
+                } );
+            } );
+        })();
+        </script>
         <?php
     }
 
@@ -409,6 +504,87 @@ class FGR_TS_Admin {
     }
 
     /**
+     * Weiteren bestehenden Benutzer zum Ticket hinzufügen (z.B. ein
+     * weiterer Ansprechpartner derselben Firma) - nur Admin-Tier. Gesucht
+     * wird per E-Mail-Adresse, da es (noch) keine Benutzer-Suche gibt.
+     */
+    public function handle_add_watcher(): void {
+        $user_id   = $this->require_agent();
+        $ticket_id = (int) ( $_POST['ticket_id'] ?? 0 );
+        check_admin_referer( 'fgr_ts_add_watcher_' . $ticket_id, 'fgr_ts_nonce' );
+
+        if ( ! FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
+            wp_die( 'Keine Berechtigung.' );
+        }
+
+        $ticket = FGR_TS_Ticket::get( $ticket_id );
+        if ( ! $ticket ) {
+            wp_die( 'Ticket nicht gefunden.' );
+        }
+
+        $email    = sanitize_email( wp_unslash( $_POST['watcher_email'] ?? '' ) );
+        $new_user = $email ? get_user_by( 'email', $email ) : false;
+        $error    = '';
+
+        if ( ! $email ) {
+            $error = 'Bitte eine E-Mail-Adresse angeben.';
+        } elseif ( ! $new_user ) {
+            $error = 'Kein Benutzer mit dieser E-Mail-Adresse gefunden.';
+        } elseif ( (int) $new_user->ID === (int) $ticket['customer_id'] ) {
+            $error = 'Dieser Benutzer ist bereits der Ersteller des Tickets.';
+        } else {
+            FGR_TS_Ticket::add_watcher( $ticket_id, (int) $new_user->ID );
+        }
+
+        $redirect = admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id );
+        if ( $error ) {
+            $redirect = add_query_arg( 'watcher_error', rawurlencode( $error ), $redirect );
+        }
+        wp_safe_redirect( $redirect );
+        exit;
+    }
+
+    public function handle_remove_watcher(): void {
+        $user_id   = $this->require_agent();
+        $ticket_id = (int) ( $_POST['ticket_id'] ?? 0 );
+        check_admin_referer( 'fgr_ts_remove_watcher_' . $ticket_id, 'fgr_ts_nonce' );
+
+        if ( ! FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
+            wp_die( 'Keine Berechtigung.' );
+        }
+
+        FGR_TS_Ticket::remove_watcher( $ticket_id, (int) ( $_POST['watcher_id'] ?? 0 ) );
+
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id ) );
+        exit;
+    }
+
+    /** Nachträgliches Bearbeiten einer Nachricht/Notiz - nur Admin-Tier. */
+    public function handle_edit_thread(): void {
+        $user_id   = $this->require_agent();
+        $thread_id = (int) ( $_POST['thread_id'] ?? 0 );
+        check_admin_referer( 'fgr_ts_edit_thread_' . $thread_id, 'fgr_ts_nonce' );
+
+        if ( ! FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
+            wp_die( 'Keine Berechtigung.' );
+        }
+
+        $thread = FGR_TS_Ticket::get_thread( $thread_id );
+        $ticket = $thread ? FGR_TS_Ticket::get( (int) $thread['ticket_id'] ) : null;
+        if ( ! $thread || ! $ticket ) {
+            wp_die( 'Nachricht nicht gefunden.' );
+        }
+
+        $body = sanitize_textarea_field( wp_unslash( $_POST['body'] ?? '' ) );
+        if ( '' !== $body ) {
+            FGR_TS_Ticket::update_thread_body( $thread_id, $body, $user_id );
+        }
+
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket['id'] ) );
+        exit;
+    }
+
+    /**
      * Sammelverarbeitung aus der Übersicht: Schließen (alle Agenten,
      * jeweils nur für Tickets mit Zugriff) oder Löschen (nur Admin-Tier,
      * siehe FGR_TS_Capabilities - Löschen ist eine destruktive Aktion,
@@ -455,6 +631,46 @@ class FGR_TS_Admin {
     }
 
     // ---------------------------------------------------------------------
+
+    /** Klickbarer Spaltenkopf zum Sortieren (Kunde/Agent) - erster Klick aufsteigend, erneuter Klick dreht um. */
+    /**
+     * Kleine Formatierungsleiste (Fett/Kursiv/Unterstrichen) über einer
+     * Antwort-/Bearbeiten-Textarea - bewusst kein voller Editor (TinyMCE
+     * o.ä.), nur diese drei Tags. Umschließt die aktuelle Textauswahl der
+     * direkt folgenden Textarea per JS (siehe enqueue_format_toolbar_script()).
+     * <strong>/<em>/<u> sind Teil von wp_kses_post()s Standard-Tags, bleiben
+     * also beim Speichern/Anzeigen erhalten.
+     */
+    private function format_toolbar(): string {
+        return '<div class="fgr-ts-format-toolbar">'
+            . '<button type="button" data-tag="strong" title="Fett"><strong>F</strong></button>'
+            . '<button type="button" data-tag="em" title="Kursiv"><em>K</em></button>'
+            . '<button type="button" data-tag="u" title="Unterstrichen"><u>U</u></button>'
+            . '</div>';
+    }
+
+    private function sortable_column_header( string $label, string $column, string $current_orderby, string $current_order ): string {
+        $is_active = $current_orderby === $column;
+        $next_order = ( $is_active && 'asc' === $current_order ) ? 'desc' : 'asc';
+
+        $args = [ 'orderby' => $column, 'order' => $next_order ];
+        if ( ! empty( $_GET['status'] ) ) {
+            $args['status'] = (int) $_GET['status'];
+        }
+        $url = add_query_arg( $args, admin_url( 'admin.php?page=' . self::PAGE_SLUG ) );
+
+        $arrow = '';
+        if ( $is_active ) {
+            $arrow = ' <span aria-hidden="true">' . ( 'asc' === $current_order ? '&#9650;' : '&#9660;' ) . '</span>';
+        }
+
+        return sprintf(
+            '<a href="%s">%s%s</a>',
+            esc_url( $url ),
+            esc_html( $label ),
+            $arrow
+        );
+    }
 
     private function index_by_id( array $rows ): array {
         $out = [];

@@ -169,6 +169,26 @@ class FGR_TS_Ticket {
         }
     }
 
+    /**
+     * Nachträgliches Bearbeiten einer Nachricht/Notiz (nur Admin-Tier, siehe
+     * FGR_TS_Capabilities - Rechteprüfung passiert im Admin-Controller).
+     * Hinterlässt wie bei einer manuellen Status-Änderung einen sichtbaren
+     * Verlaufseintrag, damit nachvollziehbar bleibt, dass editiert wurde.
+     */
+    public static function update_thread_body( int $thread_id, string $body, ?int $edited_by = null ): void {
+        global $wpdb;
+        $thread = self::get_thread( $thread_id );
+        if ( ! $thread ) {
+            return;
+        }
+        $wpdb->update( self::table( 'threads' ), [ 'body' => $body ], [ 'id' => $thread_id ] );
+
+        if ( $edited_by ) {
+            $role = FGR_TS_Capabilities::is_agent( $edited_by ) ? 'agent' : 'customer';
+            self::add_thread( (int) $thread['ticket_id'], 'log', $edited_by, $role, 'Nachricht bearbeitet', null, false );
+        }
+    }
+
     /** Löscht ein Ticket komplett (Threads, Agent-Zuweisungen, Anhänge inkl. Dateien). Nur Admin-Tier, siehe FGR_TS_Capabilities. */
     public static function delete( int $ticket_id ): void {
         global $wpdb;
@@ -176,6 +196,31 @@ class FGR_TS_Ticket {
         $wpdb->delete( self::table( 'threads' ), [ 'ticket_id' => $ticket_id ] );
         $wpdb->delete( self::table( 'ticket_agents' ), [ 'ticket_id' => $ticket_id ] );
         $wpdb->delete( self::table( 'tickets' ), [ 'id' => $ticket_id ] );
+    }
+
+    /**
+     * Weitere Teilnehmer eines Tickets (z.B. Kollegen aus derselben Firma,
+     * die ein Admin manuell hinzugefügt hat) - dürfen das Ticket wie der
+     * Ersteller sehen und beantworten, siehe FGR_TS_Capabilities.
+     */
+    public static function get_watchers( int $ticket_id ): array {
+        global $wpdb;
+        return array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+            "SELECT user_id FROM " . self::table( 'ticket_watchers' ) . " WHERE ticket_id = %d", $ticket_id
+        ) ) );
+    }
+
+    public static function add_watcher( int $ticket_id, int $user_id ): void {
+        global $wpdb;
+        $wpdb->query( $wpdb->prepare(
+            "INSERT IGNORE INTO " . self::table( 'ticket_watchers' ) . " (ticket_id, user_id) VALUES (%d, %d)",
+            $ticket_id, $user_id
+        ) );
+    }
+
+    public static function remove_watcher( int $ticket_id, int $user_id ): void {
+        global $wpdb;
+        $wpdb->delete( self::table( 'ticket_watchers' ), [ 'ticket_id' => $ticket_id, 'user_id' => $user_id ] );
     }
 
     public static function get( int $ticket_id ): ?array {
@@ -196,28 +241,53 @@ class FGR_TS_Ticket {
         return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM " . self::table( 'threads' ) . " WHERE {$where} ORDER BY date_created ASC, id ASC", $ticket_id ), ARRAY_A );
     }
 
-    /** Tickets, die ein Benutzer laut Rechtemodell sehen darf. */
+    /**
+     * Tickets, die ein Benutzer laut Rechtemodell sehen darf.
+     *
+     * $filters['orderby']: 'customer' oder 'agent' sortiert nach dem
+     * angezeigten Namen (bei mehreren Agenten alphabetisch nach dem ersten);
+     * alles andere/leer sortiert wie bisher nach dem letzten Update.
+     * $filters['order']: 'asc' oder 'desc' (Default).
+     */
     public static function get_for_user( int $user_id, array $filters = [] ): array {
         global $wpdb;
-        $where  = [ '1=1' ];
-        $params = [];
+        $where    = [ '1=1' ];
+        $params   = [];
+        $select   = 't.*';
+        $joins    = '';
+        $order_by = 't.date_updated';
 
         if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
             // keine Einschränkung
         } elseif ( FGR_TS_Capabilities::is_agent( $user_id ) ) {
-            $where[]  = 'id IN (SELECT ticket_id FROM ' . self::table( 'ticket_agents' ) . ' WHERE agent_id = %d)';
+            $where[]  = 't.id IN (SELECT ticket_id FROM ' . self::table( 'ticket_agents' ) . ' WHERE agent_id = %d)';
             $params[] = $user_id;
         } else {
-            $where[]  = 'customer_id = %d';
+            $where[]  = '(t.customer_id = %d OR t.id IN (SELECT ticket_id FROM ' . self::table( 'ticket_watchers' ) . ' WHERE user_id = %d))';
+            $params[] = $user_id;
             $params[] = $user_id;
         }
 
         if ( ! empty( $filters['status_id'] ) ) {
-            $where[]  = 'status_id = %d';
+            $where[]  = 't.status_id = %d';
             $params[] = (int) $filters['status_id'];
         }
 
-        $sql = "SELECT * FROM " . self::table( 'tickets' ) . " WHERE " . implode( ' AND ', $where ) . " ORDER BY date_updated DESC";
+        if ( 'customer' === ( $filters['orderby'] ?? '' ) ) {
+            $select  .= ', cu.display_name AS sort_customer';
+            $joins   .= ' LEFT JOIN ' . $wpdb->users . ' cu ON cu.ID = t.customer_id';
+            $order_by = 'sort_customer';
+        } elseif ( 'agent' === ( $filters['orderby'] ?? '' ) ) {
+            $select  .= ', (SELECT GROUP_CONCAT(au.display_name ORDER BY au.display_name SEPARATOR ", ")'
+                      . ' FROM ' . self::table( 'ticket_agents' ) . ' ta'
+                      . ' JOIN ' . $wpdb->users . ' au ON au.ID = ta.agent_id'
+                      . ' WHERE ta.ticket_id = t.id) AS sort_agent';
+            $order_by = 'sort_agent';
+        }
+
+        $order = 'asc' === strtolower( $filters['order'] ?? '' ) ? 'ASC' : 'DESC';
+
+        $sql = "SELECT {$select} FROM " . self::table( 'tickets' ) . " t{$joins} WHERE " . implode( ' AND ', $where ) . " ORDER BY {$order_by} {$order}";
         if ( $params ) {
             $sql = $wpdb->prepare( $sql, $params );
         }

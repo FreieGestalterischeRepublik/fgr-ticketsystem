@@ -29,7 +29,12 @@ class FGR_TS_Capabilities {
         if ( self::is_agent( $user_id ) ) {
             return in_array( $user_id, FGR_TS_Ticket::get_agents( (int) $ticket['id'] ), true );
         }
-        return (int) $ticket['customer_id'] === $user_id;
+        if ( (int) $ticket['customer_id'] === $user_id ) {
+            return true;
+        }
+        // Weitere Teilnehmer, die ein Admin manuell hinzugefügt hat (z.B.
+        // mehrere Ansprechpartner einer Firma), siehe FGR_TS_Ticket::add_watcher().
+        return in_array( $user_id, FGR_TS_Ticket::get_watchers( (int) $ticket['id'] ), true );
     }
 
     public static function can_reply_ticket( int $user_id, array $ticket ): bool {

@@ -398,10 +398,13 @@ class FGR_TS_Frontend {
             <div class="fgr-ts-thread">
                 <?php foreach ( array_reverse( $threads ) as $th ) :
                     $is_own = (int) $th['author_id'] === $user_id;
+                    $author_label = 'agent' === $th['author_role']
+                        ? $this->agent_display_label( (int) $th['author_id'] )
+                        : ( $is_own ? 'Du' : '–' );
                     ?>
                     <div class="fgr-ts-message <?php echo $is_own ? 'fgr-ts-message--own' : 'fgr-ts-message--other'; ?>">
                         <div class="fgr-ts-message-meta">
-                            <strong><?php echo esc_html( 'agent' === $th['author_role'] ? 'FGR' : ( $is_own ? 'Du' : '–' ) ); ?></strong>
+                            <strong><?php echo esc_html( $author_label ); ?></strong>
                             <span><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
                         </div>
                         <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
@@ -496,6 +499,16 @@ class FGR_TS_Frontend {
      * "Warten auf Kundenantwort" (wird für die Status-Automatik in
      * FGR_TS_Ticket::auto_advance_status() über den Namen abgeglichen).
      */
+    /** "Mario aus der FGR" statt nur "FGR" - persönlicher, der Kunde weiß so wer antwortet. */
+    private function agent_display_label( int $user_id ): string {
+        $user = $user_id ? get_userdata( $user_id ) : null;
+        if ( ! $user ) {
+            return 'FGR';
+        }
+        $first_name = $user->first_name ?: ( explode( ' ', trim( $user->display_name ) )[0] ?? '' );
+        return $first_name ? $first_name . ' aus der FGR' : 'FGR';
+    }
+
     private function display_status_name( string $name ): string {
         $map = [
             'Warten auf Kundenantwort' => 'Wir warten auf Deine Antwort',

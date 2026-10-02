@@ -88,6 +88,15 @@ class FGR_TS_Notifications {
             $agent_name = $thread['author_id'] ? $this->display_name( (int) $thread['author_id'] ) : 'FGR';
             $message    = $this->compose( "Es gibt eine neue Antwort von {$agent_name} zu deinem Ticket:", $ticket_id, $ticket, $agent_name, $body );
             $this->send( $customer->user_email, "Antwort zu deinem Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+
+            // Weitere Teilnehmer (siehe FGR_TS_Ticket::add_watcher()) sollen
+            // genauso wie der Ersteller über neue Antworten informiert werden.
+            foreach ( FGR_TS_Ticket::get_watchers( $ticket_id ) as $watcher_id ) {
+                $watcher = get_userdata( $watcher_id );
+                if ( $watcher ) {
+                    $this->send( $watcher->user_email, "Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+                }
+            }
         }
     }
 
