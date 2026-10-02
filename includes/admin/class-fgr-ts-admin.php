@@ -215,30 +215,6 @@ class FGR_TS_Admin {
 
             <hr>
 
-            <div class="fgr-ts-thread">
-                <?php foreach ( $threads as $th ) :
-                    if ( 'log' === $th['type'] ) continue; // Aktivitäts-Log hier ausgeblendet, siehe Planungs-Notizen
-                    $author = $th['author_id'] ? get_userdata( (int) $th['author_id'] ) : null;
-                    $css_role = 'note' === $th['type'] ? 'note' : $th['author_role'];
-                    ?>
-                    <div class="fgr-ts-message fgr-ts-message--<?php echo esc_attr( $css_role ); ?>">
-                        <div class="fgr-ts-message-meta">
-                            <strong><?php echo esc_html( $author ? $author->display_name : 'System' ); ?></strong>
-                            <?php if ( 'note' === $th['type'] ) : ?><span class="fgr-ts-note-label">Interne Notiz</span><?php endif; ?>
-                            <span class="fgr-ts-message-date"><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
-                        </div>
-                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
-                        <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
-                            <ul class="fgr-ts-attachments">
-                                <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
-                                    <li><a href="<?php echo esc_url( content_url( 'uploads' . $att['file_path'] ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
             <?php if ( ! empty( $_GET['upload_errors'] ) ) : ?>
                 <div class="notice notice-error">
                     <?php foreach ( explode( '||', wp_unslash( $_GET['upload_errors'] ) ) as $err ) : ?>
@@ -262,6 +238,33 @@ class FGR_TS_Admin {
                 </p>
                 <button type="submit" class="button button-primary">Senden</button>
             </form>
+
+            <hr>
+
+            <!-- Wie bei SupportCandy gewohnt: neueste Nachricht oben, älteste unten. -->
+            <div class="fgr-ts-thread">
+                <?php foreach ( array_reverse( $threads ) as $th ) :
+                    if ( 'log' === $th['type'] ) continue; // Aktivitäts-Log hier ausgeblendet, siehe Planungs-Notizen
+                    $author = $th['author_id'] ? get_userdata( (int) $th['author_id'] ) : null;
+                    $css_role = 'note' === $th['type'] ? 'note' : $th['author_role'];
+                    ?>
+                    <div class="fgr-ts-message fgr-ts-message--<?php echo esc_attr( $css_role ); ?>">
+                        <div class="fgr-ts-message-meta">
+                            <strong><?php echo esc_html( $author ? $author->display_name : 'System' ); ?></strong>
+                            <?php if ( 'note' === $th['type'] ) : ?><span class="fgr-ts-note-label">Interne Notiz</span><?php endif; ?>
+                            <span class="fgr-ts-message-date"><?php echo esc_html( $this->format_date( $th['date_created'] ) ); ?></span>
+                        </div>
+                        <div class="fgr-ts-message-body"><?php echo FGR_TS_Ticket::format_body( $th['body'] ); ?></div>
+                        <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
+                            <ul class="fgr-ts-attachments">
+                                <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
+                                    <li><a href="<?php echo esc_url( content_url( 'uploads' . $att['file_path'] ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         </div>
         <?php
     }
