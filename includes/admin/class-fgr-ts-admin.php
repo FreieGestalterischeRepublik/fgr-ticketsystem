@@ -401,7 +401,7 @@ class FGR_TS_Admin {
 
         if ( FGR_TS_Capabilities::is_admin_tier( $user_id ) ) {
             $new_agents = array_map( 'intval', (array) ( $_POST['assigned_agents'] ?? [] ) );
-            FGR_TS_Ticket::set_agents( $ticket_id, $new_agents );
+            FGR_TS_Ticket::set_agents( $ticket_id, $new_agents, $user_id );
         }
 
         wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id ) );

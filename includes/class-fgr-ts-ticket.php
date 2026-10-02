@@ -142,9 +142,14 @@ class FGR_TS_Ticket {
      * Setzt die komplette Zuweisung (ersetzt die bisherige Liste - ein
      * Ticket kann wie früher bei SupportCandy an mehrere Agenten
      * gleichzeitig gehen). Nur NEU hinzugekommene Agenten bekommen eine
-     * Benachrichtigung, nicht die, die schon zugewiesen waren.
+     * Benachrichtigung, nicht die, die schon zugewiesen waren - und wer
+     * sich selbst zuweist, bekommt dafür keine Mail (unnötig, man weiß ja
+     * selbst, was man gerade gemacht hat).
+     *
+     * $assigned_by: der Benutzer, der die Zuweisung gerade vornimmt (für
+     * die Selbst-Zuweisung-Ausnahme oben).
      */
-    public static function set_agents( int $ticket_id, array $agent_ids ): void {
+    public static function set_agents( int $ticket_id, array $agent_ids, ?int $assigned_by = null ): void {
         global $wpdb;
         $agent_ids = array_values( array_unique( array_map( 'intval', $agent_ids ) ) );
         $old_agent_ids = self::get_agents( $ticket_id );
@@ -156,6 +161,9 @@ class FGR_TS_Ticket {
         $wpdb->update( self::table( 'tickets' ), [ 'date_updated' => current_time( 'mysql' ) ], [ 'id' => $ticket_id ] );
 
         $newly_added = array_diff( $agent_ids, $old_agent_ids );
+        if ( $assigned_by ) {
+            $newly_added = array_diff( $newly_added, [ $assigned_by ] );
+        }
         if ( $newly_added ) {
             do_action( 'fgr_ts_ticket_assigned', $ticket_id, $newly_added );
         }

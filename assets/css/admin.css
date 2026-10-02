@@ -108,18 +108,27 @@
     position: relative;
 }
 
+/* Werte 1:1 aus wp-admin/css/forms.css (select { ... }) übernommen, damit
+   die Box genauso aussieht wie die nativen Status-/Priorität-/Kategorie-
+   Selects daneben - vorher war sie spürbar kleiner/schmaler als die drei
+   nativen Felder in der gleichen Zeile. */
 .fgr-ts-agent-picker summary {
     cursor: pointer;
     list-style: none;
-    border: 1px solid #8c8f94;
-    border-radius: 4px;
-    background: #fff;
-    padding: 0 8px;
-    height: 30px;
-    line-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    border: 1px solid #949494;
+    border-radius: 2px;
+    background-color: #fff;
+    color: #1e1e1e;
+    padding: 0 24px 0 12px;
+    min-height: 40px;
     min-width: 170px;
     font-weight: 400;
-    font-size: 13px;
+    font-size: 14px;
+    line-height: 2.71428571;
+    position: relative;
 }
 
 .fgr-ts-agent-picker summary::-webkit-details-marker {
@@ -127,7 +136,20 @@
 }
 
 .fgr-ts-agent-picker summary::after {
-    content: ' \25BE';
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #3c434a;
+    transform: translateY(-50%);
+}
+
+.fgr-ts-agent-picker[open] summary::after {
+    transform: translateY(-50%) rotate(180deg);
 }
 
 .fgr-ts-agent-list {
