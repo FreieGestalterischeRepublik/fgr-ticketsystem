@@ -2,7 +2,7 @@
 /**
  * Plugin Name:  FGR Ticketsystem
  * Description:  Eigenes Support-Ticketsystem für die Freie Gestalterische Republik. Werbefrei.
- * Version:      1.3.2
+ * Version:      1.3.3
  * Author:       Freie Gestalterische Republik
  * Author URI:   https://fgr.design
  * License:      GPL-2.0-or-later
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FGR_TS_VERSION', '1.3.2' );
+define( 'FGR_TS_VERSION', '1.3.3' );
 define( 'FGR_TS_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'FGR_TS_URL',     plugin_dir_url( __FILE__ ) );
 define( 'FGR_TS_DB_VERSION', '2' ); // bei Schema-Änderungen hochzählen, löst dbDelta erneut aus

@@ -230,10 +230,51 @@ body.page-id-462 .col-lg-9.col-xl-6 {
     background: transparent !important;
     font-family: inherit;
     cursor: pointer;
+    position: relative;
     border-style: solid !important;
     border-width: 3px !important;
     border-bottom-color: transparent !important;
     border-left-color: transparent !important;
+}
+
+/* Gleicher animierter Hover wie bei .fgr-ts-tabs .cta-tabs / .fgr-ts-submit:
+   fehlte hier bisher komplett - die Buttons hatten gar keinen Hovereffekt. */
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:before {
+    content: "";
+    display: block;
+    height: 0;
+    width: 3px;
+    background: var(--primaryColor);
+    transition: height 0.125s linear;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:after {
+    content: "";
+    display: block;
+    height: 3px;
+    width: 0;
+    background: var(--primaryColor);
+    transition: width 0.125s linear;
+    position: absolute;
+    right: -3px;
+    bottom: 0;
+}
+
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:hover:before {
+    height: 100%;
+}
+
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:hover:after {
+    width: 100%;
+}
+
+#fgr_ts_portal .fgr-ts-status-actions button.cta-tabs:hover {
+    border-color: transparent !important;
+    color: var(--primaryColor) !important;
+    transition: border-color 0.25s linear !important;
 }
 
 .fgr-ts-detail-head {
