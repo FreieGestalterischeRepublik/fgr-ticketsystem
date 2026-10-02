@@ -411,7 +411,7 @@ class FGR_TS_Frontend {
                         <?php if ( ! empty( $attachments[ $th['id'] ] ) ) : ?>
                             <ul class="fgr-ts-attachments">
                                 <?php foreach ( $attachments[ $th['id'] ] as $att ) : ?>
-                                    <li><a href="<?php echo esc_url( content_url( 'uploads' . $att['file_path'] ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
+                                    <li><a href="<?php echo esc_url( FGR_TS_Attachment::download_url( $att ) ); ?>" target="_blank"><?php echo esc_html( $att['file_name'] ); ?></a></li>
                                 <?php endforeach; ?>
                             </ul>
                         <?php endif; ?>
