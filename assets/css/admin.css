@@ -10,7 +10,13 @@
     font-weight: 600;
 }
 
-.fgr-ts-meta-form {
+/* Die Teilnehmer-Verwaltung (eigene <form>s für Hinzufügen/Entfernen,
+   dürfen nicht ineinander verschachtelt sein) soll optisch trotzdem in
+   derselben Zeile wie Status/Priorität/Kategorie/Agent(en) stehen - das
+   eigentliche <form class="fgr-ts-meta-form"> bekommt daher
+   display:contents, damit seine Felder direkte Flex-Kinder von
+   .fgr-ts-meta-bar werden und neben den Teilnehmer-Feldern "schweben". */
+.fgr-ts-meta-bar {
     display: flex;
     gap: 20px;
     align-items: flex-end;
@@ -21,7 +27,11 @@
     margin: 16px 0;
 }
 
-.fgr-ts-meta-form label {
+.fgr-ts-meta-form {
+    display: contents;
+}
+
+.fgr-ts-meta-bar label {
     display: flex;
     flex-direction: column;
     font-weight: 600;
@@ -197,13 +207,6 @@
 .fgr-ts-edit-form textarea {
     width: 100%;
     margin-bottom: 6px;
-}
-
-.fgr-ts-watchers {
-    margin: 10px 0 16px;
-    padding: 10px 14px;
-    background: #fff;
-    border: 1px solid #c3c4c7;
 }
 
 .fgr-ts-watcher-list {

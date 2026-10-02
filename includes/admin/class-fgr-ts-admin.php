@@ -242,63 +242,7 @@ class FGR_TS_Admin {
             <p class="description">Kunde: <strong><?php echo esc_html( $customer ? $customer->display_name : '–' ); ?></strong>
                 (<?php echo esc_html( $customer ? $customer->user_email : '–' ); ?>)</p>
 
-            <?php if ( $is_admin_tier ) :
-                $watcher_ids = FGR_TS_Ticket::get_watchers( $ticket_id );
-                ?>
-                <div class="fgr-ts-watchers">
-                    <strong>Weitere Teilnehmer:</strong>
-                    <?php if ( $watcher_ids ) : ?>
-                        <ul class="fgr-ts-watcher-list">
-                            <?php foreach ( $watcher_ids as $watcher_id ) :
-                                $watcher = get_userdata( $watcher_id );
-                                if ( ! $watcher ) {
-                                    continue;
-                                }
-                                ?>
-                                <li>
-                                    <?php echo esc_html( $watcher->display_name . ' (' . $watcher->user_email . ')' ); ?>
-                                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-remove-form">
-                                        <?php wp_nonce_field( 'fgr_ts_remove_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
-                                        <input type="hidden" name="action" value="fgr_ts_remove_watcher">
-                                        <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
-                                        <input type="hidden" name="watcher_id" value="<?php echo (int) $watcher_id; ?>">
-                                        <button type="submit" class="button-link fgr-ts-watcher-remove">entfernen</button>
-                                    </form>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php else : ?>
-                        <span class="description"> keine</span>
-                    <?php endif; ?>
-
-                    <?php if ( ! empty( $_GET['watcher_error'] ) ) : ?>
-                        <p class="fgr-ts-watcher-error"><?php echo esc_html( wp_unslash( $_GET['watcher_error'] ) ); ?></p>
-                    <?php endif; ?>
-
-                    <?php
-                    // Nur Kunden-Accounts zur Auswahl anbieten (keine Agenten -
-                    // die haben ohnehin schon Zugriff auf alles/ihre Tickets),
-                    // und keine, die schon Ersteller oder bereits Teilnehmer sind.
-                    $excluded_ids  = array_merge( [ (int) $ticket['customer_id'] ], $watcher_ids );
-                    $addable_users = array_filter( get_users( [ 'orderby' => 'display_name', 'order' => 'ASC' ] ), function ( $u ) use ( $excluded_ids ) {
-                        return ! FGR_TS_Capabilities::is_agent( $u->ID ) && ! in_array( $u->ID, $excluded_ids, true );
-                    } );
-                    ?>
-                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-add-form">
-                        <?php wp_nonce_field( 'fgr_ts_add_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
-                        <input type="hidden" name="action" value="fgr_ts_add_watcher">
-                        <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
-                        <select name="watcher_id">
-                            <option value="">— Benutzer wählen —</option>
-                            <?php foreach ( $addable_users as $u ) : ?>
-                                <option value="<?php echo (int) $u->ID; ?>"><?php echo esc_html( $u->display_name . ' (' . $u->user_email . ')' ); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="submit" class="button">Hinzufügen</button>
-                    </form>
-                </div>
-            <?php endif; ?>
-
+            <div class="fgr-ts-meta-bar">
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-meta-form">
                 <?php wp_nonce_field( 'fgr_ts_update_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_update">
@@ -351,6 +295,67 @@ class FGR_TS_Admin {
 
                 <button type="submit" class="button">Übernehmen</button>
             </form>
+
+            <?php if ( $is_admin_tier ) :
+                $watcher_ids   = FGR_TS_Ticket::get_watchers( $ticket_id );
+                $summary_label = $watcher_ids ? count( $watcher_ids ) . ' ausgewählt' : 'Keiner ausgewählt';
+                // Nur Kunden-Accounts zur Auswahl anbieten (keine Agenten -
+                // die haben ohnehin schon Zugriff auf alles/ihre Tickets),
+                // und keine, die schon Ersteller oder bereits Teilnehmer sind.
+                $excluded_ids  = array_merge( [ (int) $ticket['customer_id'] ], $watcher_ids );
+                $addable_users = array_filter( get_users( [ 'orderby' => 'display_name', 'order' => 'ASC' ] ), function ( $u ) use ( $excluded_ids ) {
+                    return ! FGR_TS_Capabilities::is_agent( $u->ID ) && ! in_array( $u->ID, $excluded_ids, true );
+                } );
+                ?>
+                <label>Weitere Teilnehmer
+                    <details class="fgr-ts-agent-picker">
+                        <summary><?php echo esc_html( $summary_label ); ?></summary>
+                        <div class="fgr-ts-agent-list">
+                            <?php if ( $watcher_ids ) : ?>
+                                <ul class="fgr-ts-watcher-list">
+                                    <?php foreach ( $watcher_ids as $watcher_id ) :
+                                        $watcher = get_userdata( $watcher_id );
+                                        if ( ! $watcher ) {
+                                            continue;
+                                        }
+                                        ?>
+                                        <li>
+                                            <?php echo esc_html( $watcher->display_name ); ?>
+                                            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-remove-form">
+                                                <?php wp_nonce_field( 'fgr_ts_remove_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
+                                                <input type="hidden" name="action" value="fgr_ts_remove_watcher">
+                                                <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
+                                                <input type="hidden" name="watcher_id" value="<?php echo (int) $watcher_id; ?>">
+                                                <button type="submit" class="button-link fgr-ts-watcher-remove">entfernen</button>
+                                            </form>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php else : ?>
+                                <span class="description">Keine</span>
+                            <?php endif; ?>
+
+                            <?php if ( ! empty( $_GET['watcher_error'] ) ) : ?>
+                                <p class="fgr-ts-watcher-error"><?php echo esc_html( wp_unslash( $_GET['watcher_error'] ) ); ?></p>
+                            <?php endif; ?>
+
+                            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-add-form">
+                                <?php wp_nonce_field( 'fgr_ts_add_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
+                                <input type="hidden" name="action" value="fgr_ts_add_watcher">
+                                <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
+                                <select name="watcher_id">
+                                    <option value="">— Benutzer wählen —</option>
+                                    <?php foreach ( $addable_users as $u ) : ?>
+                                        <option value="<?php echo (int) $u->ID; ?>"><?php echo esc_html( $u->display_name . ' (' . $u->user_email . ')' ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="button">Hinzufügen</button>
+                            </form>
+                        </div>
+                    </details>
+                </label>
+            <?php endif; ?>
+            </div>
 
             <hr>
 
