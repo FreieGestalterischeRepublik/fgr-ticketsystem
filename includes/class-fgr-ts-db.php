@@ -102,6 +102,13 @@ class FGR_TS_DB {
 
         self::maybe_seed_defaults();
 
+        // Falls schon eine Seite mit Slug "tickets" existiert (die alte
+        // SupportCandy-Portalseite), gleich als Portal-Seite übernehmen.
+        if ( false === get_option( 'fgr_ts_portal_page_id', false ) ) {
+            $existing = get_page_by_path( 'tickets' );
+            add_option( 'fgr_ts_portal_page_id', $existing ? $existing->ID : 0 );
+        }
+
         update_option( 'fgr_ts_db_version', FGR_TS_DB_VERSION );
     }
 

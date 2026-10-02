@@ -156,6 +156,15 @@ class FGR_TS_Migrate {
         }
         WP_CLI::log( "{$imported_attachments} Anhänge importiert." );
 
+        // --- Agenten übernehmen (role 1 = Administrator-Tier, 2 = Agent-Tier in SupportCandy) ---
+        $agents = $wpdb->get_results( "SELECT user, role FROM {$old}agents WHERE is_active = 1", ARRAY_A );
+        foreach ( $agents as $a ) {
+            $tier = ( (int) $a['role'] === 1 ) ? 'admin' : 'agent';
+            update_user_meta( (int) $a['user'], 'fgr_ts_is_agent', 1 );
+            update_user_meta( (int) $a['user'], 'fgr_ts_tier', $tier );
+        }
+        WP_CLI::log( count( $agents ) . ' Agenten übernommen.' );
+
         WP_CLI::success( 'Migration abgeschlossen.' );
     }
 

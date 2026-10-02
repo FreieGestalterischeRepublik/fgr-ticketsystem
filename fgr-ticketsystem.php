@@ -36,10 +36,14 @@ add_filter( 'auto_update_plugin', function ( $update, $item ) {
 
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-db.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-migrate.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-capabilities.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-ticket.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-notifications.php';
 
 register_activation_hook( __FILE__, [ 'FGR_TS_DB', 'install' ] );
 
 add_action( 'plugins_loaded', function () {
     FGR_TS_DB::maybe_upgrade();
     new FGR_TS_Migrate();
+    new FGR_TS_Notifications();
 } );
