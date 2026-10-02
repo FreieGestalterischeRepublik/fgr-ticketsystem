@@ -213,7 +213,15 @@ class FGR_TS_Admin {
                 <?php endforeach; ?>
             </div>
 
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-reply-form">
+            <?php if ( ! empty( $_GET['upload_errors'] ) ) : ?>
+                <div class="notice notice-error">
+                    <?php foreach ( explode( '||', wp_unslash( $_GET['upload_errors'] ) ) as $err ) : ?>
+                        <p><?php echo esc_html( $err ); ?></p>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-reply-form" enctype="multipart/form-data">
                 <?php wp_nonce_field( 'fgr_ts_reply_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_reply">
                 <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
@@ -221,6 +229,10 @@ class FGR_TS_Admin {
                 <textarea name="body" rows="6" class="large-text" required></textarea>
                 <p>
                     <label><input type="checkbox" name="is_note" value="1"> Interne Notiz (für den Kunden nicht sichtbar)</label>
+                </p>
+                <p>
+                    <label for="fgr-ts-attachments">Anhänge (max. 20 MB pro Datei)</label><br>
+                    <input type="file" id="fgr-ts-attachments" name="attachments[]" multiple>
                 </p>
                 <button type="submit" class="button button-primary">Senden</button>
             </form>
@@ -242,11 +254,21 @@ class FGR_TS_Admin {
 
         $body    = sanitize_textarea_field( wp_unslash( $_POST['body'] ?? '' ) );
         $is_note = ! empty( $_POST['is_note'] );
+        $errors  = [];
+
         if ( $body !== '' ) {
-            FGR_TS_Ticket::add_thread( $ticket_id, $is_note ? 'note' : 'message', $user_id, 'agent', $body, $_SERVER['REMOTE_ADDR'] ?? null );
+            $thread_id = FGR_TS_Ticket::add_thread( $ticket_id, $is_note ? 'note' : 'message', $user_id, 'agent', $body, $_SERVER['REMOTE_ADDR'] ?? null );
+
+            if ( ! empty( $_FILES['attachments'] ) ) {
+                $errors = FGR_TS_Attachment::handle_uploads( $_FILES['attachments'], $ticket_id, $thread_id, $user_id );
+            }
         }
 
-        wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id ) );
+        $redirect = admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id );
+        if ( $errors ) {
+            $redirect = add_query_arg( 'upload_errors', rawurlencode( implode( '||', $errors ) ), $redirect );
+        }
+        wp_safe_redirect( $redirect );
         exit;
     }
 
