@@ -238,8 +238,10 @@ class FGR_TS_Frontend {
             </div>
 
             <div class="fgr-ts-ticket-list">
-                <?php if ( ! $tickets ) : ?>
+                <?php if ( ! $tickets && empty( $_GET['status'] ) ) : ?>
                     <p>Keine Tickets gefunden. <a href="<?php echo esc_url( $this->portal_url( [ 'view' => 'new' ] ) ); ?>">Erstelle jetzt Dein erstes Ticket!</a></p>
+                <?php elseif ( ! $tickets ) : ?>
+                    <p>Keine Tickets in diesem Status gefunden.</p>
                 <?php endif; ?>
                 <?php foreach ( $tickets as $t ) :
                     $status = $status_by_id[ (int) $t['status_id'] ] ?? null;
