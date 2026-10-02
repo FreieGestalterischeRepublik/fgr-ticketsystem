@@ -275,11 +275,25 @@ class FGR_TS_Admin {
                         <p class="fgr-ts-watcher-error"><?php echo esc_html( wp_unslash( $_GET['watcher_error'] ) ); ?></p>
                     <?php endif; ?>
 
+                    <?php
+                    // Nur Kunden-Accounts zur Auswahl anbieten (keine Agenten -
+                    // die haben ohnehin schon Zugriff auf alles/ihre Tickets),
+                    // und keine, die schon Ersteller oder bereits Teilnehmer sind.
+                    $excluded_ids  = array_merge( [ (int) $ticket['customer_id'] ], $watcher_ids );
+                    $addable_users = array_filter( get_users( [ 'orderby' => 'display_name', 'order' => 'ASC' ] ), function ( $u ) use ( $excluded_ids ) {
+                        return ! FGR_TS_Capabilities::is_agent( $u->ID ) && ! in_array( $u->ID, $excluded_ids, true );
+                    } );
+                    ?>
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-watcher-add-form">
                         <?php wp_nonce_field( 'fgr_ts_add_watcher_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                         <input type="hidden" name="action" value="fgr_ts_add_watcher">
                         <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
-                        <input type="email" name="watcher_email" placeholder="E-Mail eines bestehenden Benutzers">
+                        <select name="watcher_id">
+                            <option value="">— Benutzer wählen —</option>
+                            <?php foreach ( $addable_users as $u ) : ?>
+                                <option value="<?php echo (int) $u->ID; ?>"><?php echo esc_html( $u->display_name . ' (' . $u->user_email . ')' ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                         <button type="submit" class="button">Hinzufügen</button>
                     </form>
                 </div>
@@ -353,8 +367,7 @@ class FGR_TS_Admin {
                 <input type="hidden" name="action" value="fgr_ts_reply">
                 <input type="hidden" name="ticket_id" value="<?php echo (int) $ticket_id; ?>">
                 <h2>Antworten</h2>
-                <?php echo $this->format_toolbar(); ?>
-                <textarea name="body" rows="6" class="large-text" required></textarea>
+                <?php echo $this->wysiwyg_field( '', 160 ); ?>
                 <p>
                     <label><input type="checkbox" name="is_note" value="1"> Interne Notiz (für den Kunden nicht sichtbar)</label>
                 </p>
@@ -404,8 +417,7 @@ class FGR_TS_Admin {
                                     <?php wp_nonce_field( 'fgr_ts_edit_thread_' . $th['id'], 'fgr_ts_nonce' ); ?>
                                     <input type="hidden" name="action" value="fgr_ts_edit_thread">
                                     <input type="hidden" name="thread_id" value="<?php echo (int) $th['id']; ?>">
-                                    <?php echo $this->format_toolbar(); ?>
-                                    <textarea name="body" rows="4" class="large-text" required><?php echo esc_textarea( $th['body'] ); ?></textarea>
+                                    <?php echo $this->wysiwyg_field( $th['body'], 90 ); ?>
                                     <button type="submit" class="button">Speichern</button>
                                 </form>
                             </details>
@@ -416,25 +428,34 @@ class FGR_TS_Admin {
         </div>
         <script>
         (function() {
-            document.querySelectorAll( '.fgr-ts-format-toolbar' ).forEach( function( toolbar ) {
-                var textarea = toolbar.nextElementSibling;
-                if ( ! textarea || 'TEXTAREA' !== textarea.tagName ) {
+            try { document.execCommand( 'defaultParagraphSeparator', false, 'br' ); } catch ( e ) {}
+
+            document.querySelectorAll( '.fgr-ts-wysiwyg' ).forEach( function( wrap ) {
+                var editor = wrap.querySelector( '.fgr-ts-wysiwyg-editor' );
+                var hidden = wrap.querySelector( '.fgr-ts-wysiwyg-hidden' );
+                if ( ! editor || ! hidden ) {
                     return;
                 }
-                toolbar.querySelectorAll( 'button[data-tag]' ).forEach( function( btn ) {
+
+                hidden.value = editor.innerHTML;
+                editor.addEventListener( 'input', function() {
+                    hidden.value = editor.innerHTML;
+                } );
+
+                wrap.querySelectorAll( '.fgr-ts-wysiwyg-toolbar button[data-cmd]' ).forEach( function( btn ) {
                     btn.addEventListener( 'click', function() {
-                        var tag   = btn.getAttribute( 'data-tag' );
-                        var start = textarea.selectionStart;
-                        var end   = textarea.selectionEnd;
-                        var value = textarea.value;
-                        var open  = '<' + tag + '>';
-                        var close = '</' + tag + '>';
-                        textarea.value = value.substring( 0, start ) + open + value.substring( start, end ) + close + value.substring( end );
-                        textarea.focus();
-                        textarea.selectionStart = start + open.length;
-                        textarea.selectionEnd   = end + open.length;
+                        editor.focus();
+                        document.execCommand( btn.getAttribute( 'data-cmd' ), false, null );
+                        hidden.value = editor.innerHTML;
                     } );
                 } );
+
+                var form = wrap.closest( 'form' );
+                if ( form ) {
+                    form.addEventListener( 'submit', function() {
+                        hidden.value = editor.innerHTML;
+                    } );
+                }
             } );
         })();
         </script>
@@ -453,7 +474,7 @@ class FGR_TS_Admin {
             wp_die( 'Keine Berechtigung.' );
         }
 
-        $body    = sanitize_textarea_field( wp_unslash( $_POST['body'] ?? '' ) );
+        $body    = $this->sanitize_rich_body( wp_unslash( $_POST['body'] ?? '' ) );
         $is_note = ! empty( $_POST['is_note'] );
         $errors  = [];
 
@@ -505,8 +526,9 @@ class FGR_TS_Admin {
 
     /**
      * Weiteren bestehenden Benutzer zum Ticket hinzufügen (z.B. ein
-     * weiterer Ansprechpartner derselben Firma) - nur Admin-Tier. Gesucht
-     * wird per E-Mail-Adresse, da es (noch) keine Benutzer-Suche gibt.
+     * weiterer Ansprechpartner derselben Firma) - nur Admin-Tier. Auswahl
+     * per Dropdown (siehe render_detail()) statt Freitext, da es nur
+     * bestehende Accounts sein können (Konto muss vorher angelegt sein).
      */
     public function handle_add_watcher(): void {
         $user_id   = $this->require_agent();
@@ -522,18 +544,18 @@ class FGR_TS_Admin {
             wp_die( 'Ticket nicht gefunden.' );
         }
 
-        $email    = sanitize_email( wp_unslash( $_POST['watcher_email'] ?? '' ) );
-        $new_user = $email ? get_user_by( 'email', $email ) : false;
-        $error    = '';
+        $watcher_id = (int) ( $_POST['watcher_id'] ?? 0 );
+        $new_user   = $watcher_id ? get_userdata( $watcher_id ) : false;
+        $error      = '';
 
-        if ( ! $email ) {
-            $error = 'Bitte eine E-Mail-Adresse angeben.';
+        if ( ! $watcher_id ) {
+            $error = 'Bitte einen Benutzer auswählen.';
         } elseif ( ! $new_user ) {
-            $error = 'Kein Benutzer mit dieser E-Mail-Adresse gefunden.';
-        } elseif ( (int) $new_user->ID === (int) $ticket['customer_id'] ) {
+            $error = 'Benutzer nicht gefunden.';
+        } elseif ( $watcher_id === (int) $ticket['customer_id'] ) {
             $error = 'Dieser Benutzer ist bereits der Ersteller des Tickets.';
         } else {
-            FGR_TS_Ticket::add_watcher( $ticket_id, (int) $new_user->ID );
+            FGR_TS_Ticket::add_watcher( $ticket_id, $watcher_id );
         }
 
         $redirect = admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id );
@@ -575,7 +597,7 @@ class FGR_TS_Admin {
             wp_die( 'Nachricht nicht gefunden.' );
         }
 
-        $body = sanitize_textarea_field( wp_unslash( $_POST['body'] ?? '' ) );
+        $body = $this->sanitize_rich_body( wp_unslash( $_POST['body'] ?? '' ) );
         if ( '' !== $body ) {
             FGR_TS_Ticket::update_thread_body( $thread_id, $body, $user_id );
         }
@@ -632,23 +654,47 @@ class FGR_TS_Admin {
 
     // ---------------------------------------------------------------------
 
-    /** Klickbarer Spaltenkopf zum Sortieren (Kunde/Agent) - erster Klick aufsteigend, erneuter Klick dreht um. */
     /**
-     * Kleine Formatierungsleiste (Fett/Kursiv/Unterstrichen) über einer
-     * Antwort-/Bearbeiten-Textarea - bewusst kein voller Editor (TinyMCE
-     * o.ä.), nur diese drei Tags. Umschließt die aktuelle Textauswahl der
-     * direkt folgenden Textarea per JS (siehe enqueue_format_toolbar_script()).
-     * <strong>/<em>/<u> sind Teil von wp_kses_post()s Standard-Tags, bleiben
-     * also beim Speichern/Anzeigen erhalten.
+     * Nachrichtentext aus dem WYSIWYG-Feld (siehe wysiwyg_field()) säubern:
+     * sanitize_textarea_field() würde ALLE HTML-Tags entfernen (auch die
+     * gewünschten Fett/Kursiv/Unterstrichen-Tags) - hier bewusst nur genau
+     * diese drei plus Zeilenumbrüche erlauben, alles andere raus.
      */
-    private function format_toolbar(): string {
-        return '<div class="fgr-ts-format-toolbar">'
-            . '<button type="button" data-tag="strong" title="Fett"><strong>F</strong></button>'
-            . '<button type="button" data-tag="em" title="Kursiv"><em>K</em></button>'
-            . '<button type="button" data-tag="u" title="Unterstrichen"><u>U</u></button>'
+    private function sanitize_rich_body( string $raw ): string {
+        return trim( wp_kses( $raw, [
+            'strong' => [],
+            'b'      => [],
+            'em'     => [],
+            'i'      => [],
+            'u'      => [],
+            'br'     => [],
+        ] ) );
+    }
+
+    /**
+     * Echtes WYSIWYG statt rohem HTML im Textfeld: ein contenteditable-Div
+     * mit Fett/Kursiv/Unterstrichen-Buttons (document.execCommand - bewusst
+     * kein TinyMCE/voller Editor). Der Inhalt wird per JS laufend in die
+     * eigentlich abgeschickte (versteckte) Textarea gespiegelt, damit am
+     * Server weiterhin ganz normal $_POST['body'] ankommt.
+     *
+     * $initial_html: bestehender Inhalt (Bearbeiten) oder leer (Antworten) -
+     * schon sicheres HTML (kommt entweder leer oder aus der eigenen DB, die
+     * nur über sanitize_rich_body() befüllt wird).
+     */
+    private function wysiwyg_field( string $initial_html, int $min_height ): string {
+        return '<div class="fgr-ts-wysiwyg">'
+            . '<div class="fgr-ts-wysiwyg-toolbar">'
+            . '<button type="button" data-cmd="bold" title="Fett"><strong>F</strong></button>'
+            . '<button type="button" data-cmd="italic" title="Kursiv"><em>K</em></button>'
+            . '<button type="button" data-cmd="underline" title="Unterstrichen"><u>U</u></button>'
+            . '</div>'
+            . '<div class="fgr-ts-wysiwyg-editor" contenteditable="true" style="min-height:' . (int) $min_height . 'px;">' . $initial_html . '</div>'
+            . '<textarea name="body" class="fgr-ts-wysiwyg-hidden"></textarea>'
             . '</div>';
     }
 
+    /** Klickbarer Spaltenkopf zum Sortieren (Kunde/Agent) - erster Klick aufsteigend, erneuter Klick dreht um. */
     private function sortable_column_header( string $label, string $column, string $current_orderby, string $current_order ): string {
         $is_active = $current_orderby === $column;
         $next_order = ( $is_active && 'asc' === $current_order ) ? 'desc' : 'asc';

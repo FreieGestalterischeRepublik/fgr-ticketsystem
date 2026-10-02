@@ -238,13 +238,13 @@
     margin: 6px 0;
 }
 
-.fgr-ts-format-toolbar {
+.fgr-ts-wysiwyg-toolbar {
     display: flex;
     gap: 4px;
     margin-bottom: 4px;
 }
 
-.fgr-ts-format-toolbar button {
+.fgr-ts-wysiwyg-toolbar button {
     cursor: pointer;
     width: 28px;
     height: 28px;
@@ -256,6 +256,33 @@
     border-radius: 2px;
 }
 
-.fgr-ts-format-toolbar button:hover {
+.fgr-ts-wysiwyg-toolbar button:hover {
     background: #f0f0f1;
+}
+
+/* contenteditable-Div statt <textarea>, damit Fett/Kursiv/Unterstrichen
+   direkt sichtbar formatiert erscheinen (WYSIWYG) statt roher HTML-Tags
+   im Text - siehe FGR_TS_Admin::wysiwyg_field(). */
+.fgr-ts-wysiwyg-editor {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    background: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-y: auto;
+}
+
+.fgr-ts-wysiwyg-editor:focus {
+    border-color: var(--wp-admin-theme-color, #2271b1);
+    box-shadow: 0 0 0 1px var(--wp-admin-theme-color, #2271b1);
+    outline: none;
+}
+
+.fgr-ts-wysiwyg-hidden {
+    display: none;
 }
