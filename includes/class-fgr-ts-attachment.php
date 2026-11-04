@@ -114,6 +114,48 @@ class FGR_TS_Attachment {
         return $errors;
     }
 
+    /**
+     * Speichert einen Anhang aus einer E-Mail mit denselben Grenzen wie beim
+     * Upload. wp_handle_upload() akzeptiert nur echte HTTP-Uploads, deshalb
+     * der Weg über wp_handle_sideload(). Gibt eine Fehlermeldung oder null zurück.
+     */
+    public static function store_content( string $name, string $content, int $ticket_id, ?int $thread_id, int $uploaded_by ): ?string {
+        if ( strlen( $content ) > self::MAX_SIZE_BYTES ) {
+            return sprintf( '%s: Datei ist größer als 20 MB.', $name );
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+
+        $tmp_file = wp_tempnam( $name );
+        if ( ! $tmp_file || false === file_put_contents( $tmp_file, $content ) ) {
+            return sprintf( '%s: Temporäre Datei konnte nicht geschrieben werden.', $name );
+        }
+
+        $file = [ 'name' => $name, 'tmp_name' => $tmp_file, 'error' => UPLOAD_ERR_OK, 'size' => strlen( $content ) ];
+
+        add_filter( 'upload_dir', [ __CLASS__, 'filter_upload_dir' ] );
+        $result = wp_handle_sideload( $file, [ 'test_form' => false, 'mimes' => self::allowed_mimes() ] );
+        remove_filter( 'upload_dir', [ __CLASS__, 'filter_upload_dir' ] );
+
+        if ( is_file( $tmp_file ) ) {
+            @unlink( $tmp_file );
+        }
+        if ( isset( $result['error'] ) ) {
+            return sprintf( '%s: %s', $name, $result['error'] );
+        }
+
+        global $wpdb;
+        $wpdb->insert( FGR_TS_Ticket::table( 'attachments' ), [
+            'thread_id'    => $thread_id,
+            'ticket_id'    => $ticket_id,
+            'file_path'    => str_replace( wp_get_upload_dir()['basedir'], '', $result['file'] ),
+            'file_name'    => $name,
+            'uploaded_by'  => $uploaded_by,
+            'date_created' => current_time( 'mysql' ),
+        ] );
+        return null;
+    }
+
     /** Löscht alle Anhänge eines Tickets - DB-Zeilen UND die Dateien selbst. */
     public static function delete_for_ticket( int $ticket_id ): void {
         global $wpdb;

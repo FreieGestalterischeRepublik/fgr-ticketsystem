@@ -18,6 +18,8 @@ defined( 'ABSPATH' ) || exit;
  *   zu einem Ticket hinzugefügt hat (z.B. mehrere Ansprechpartner einer
  *   Firma) - dürfen das Ticket wie der Ersteller sehen und beantworten,
  *   seit Schema-Version 3.
+ * - fgr_ts_mail_log: Protokoll und Duplikatschutz des E-Mail-Eingangs
+ *   (siehe FGR_TS_Mail), seit Schema-Version 4.
  */
 class FGR_TS_DB {
 
@@ -117,6 +119,19 @@ class FGR_TS_DB {
             PRIMARY KEY (id),
             KEY thread_id (thread_id),
             KEY ticket_id (ticket_id)
+        ) {$charset_collate};
+
+        CREATE TABLE {$p}mail_log (
+            hash CHAR(64) NOT NULL,
+            sender VARCHAR(190) NOT NULL DEFAULT '',
+            subject VARCHAR(190) NOT NULL DEFAULT '',
+            result VARCHAR(20) NOT NULL,
+            reason VARCHAR(190) NOT NULL DEFAULT '',
+            ticket_id BIGINT UNSIGNED NULL,
+            date_created DATETIME NOT NULL,
+            PRIMARY KEY (hash),
+            KEY sender (sender),
+            KEY date_created (date_created)
         ) {$charset_collate};
         ";
 

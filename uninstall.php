@@ -5,6 +5,7 @@ global $wpdb;
 $p = $wpdb->prefix . 'fgr_ts_';
 
 foreach ( [
+    'mail_log',
     'attachments',
     'ticket_watchers',
     'ticket_agents',
@@ -17,7 +18,7 @@ foreach ( [
     $wpdb->query( "DROP TABLE IF EXISTS {$p}{$table}" );
 }
 
-foreach ( [ 'fgr_ts_db_version', 'fgr_ts_portal_page_id', 'fgr_ts_gdpr_text' ] as $option ) {
+foreach ( [ 'fgr_ts_db_version', 'fgr_ts_portal_page_id', 'fgr_ts_gdpr_text', 'fgr_ts_mail', 'fgr_ts_mail_status' ] as $option ) {
     delete_option( $option );
 }
 

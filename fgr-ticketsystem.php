@@ -2,7 +2,7 @@
 /**
  * Plugin Name:  FGR Ticketsystem
  * Description:  Eigenes Support-Ticketsystem für die Freie Gestalterische Republik. Werbefrei.
- * Version:      1.4.5
+ * Version:      1.5.0
  * Author:       Freie Gestalterische Republik
  * Author URI:   https://fgr.design
  * License:      GPL-2.0-or-later
@@ -13,10 +13,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FGR_TS_VERSION', '1.4.5' );
+define( 'FGR_TS_VERSION', '1.5.0' );
 define( 'FGR_TS_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'FGR_TS_URL',     plugin_dir_url( __FILE__ ) );
-define( 'FGR_TS_DB_VERSION', '3' ); // bei Schema-Änderungen hochzählen, löst dbDelta erneut aus
+define( 'FGR_TS_DB_VERSION', '4' ); // bei Schema-Änderungen hochzählen, löst dbDelta erneut aus
 
 // Update-Checker: fragt die zentrale FGR-Update-API ab (nicht direkt GitHub)
 require_once FGR_TS_DIR . 'lib/plugin-update-checker/plugin-update-checker.php';
@@ -39,9 +39,12 @@ require_once FGR_TS_DIR . 'includes/class-fgr-ts-migrate.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-capabilities.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-ticket.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-notifications.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-mail-parser.php';
+require_once FGR_TS_DIR . 'includes/class-fgr-ts-mail.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-attachment.php';
 require_once FGR_TS_DIR . 'includes/class-fgr-ts-registration.php';
 require_once FGR_TS_DIR . 'includes/admin/class-fgr-ts-admin.php';
+require_once FGR_TS_DIR . 'includes/admin/class-fgr-ts-mail-settings.php';
 require_once FGR_TS_DIR . 'includes/frontend/class-fgr-ts-frontend.php';
 
 register_activation_hook( __FILE__, function () {
@@ -55,7 +58,9 @@ add_action( 'plugins_loaded', function () {
     FGR_TS_Attachment::init();
     new FGR_TS_Migrate();
     new FGR_TS_Notifications();
+    FGR_TS_Mail::init();
     new FGR_TS_Admin();
+    new FGR_TS_Mail_Settings();
     new FGR_TS_Frontend();
     new FGR_TS_Registration();
 } );

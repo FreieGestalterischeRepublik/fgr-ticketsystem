@@ -20,7 +20,7 @@ class FGR_TS_Ticket {
      * Legt ein neues Ticket samt erster Nachricht (Beschreibung) an.
      * Gibt die neue Ticket-ID zurück.
      */
-    public static function create( int $customer_id, string $subject, string $body, int $category_id, ?string $ip_address = null, ?int $priority_id = null ): int {
+    public static function create( int $customer_id, string $subject, string $body, int $category_id, ?string $ip_address = null, ?int $priority_id = null, string $source = 'web', bool $gdpr_consent = true ): int {
         global $wpdb;
 
         $default_status_id = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'statuses' ) . " WHERE is_closed = 0 ORDER BY sort_order ASC LIMIT 1" );
@@ -35,9 +35,9 @@ class FGR_TS_Ticket {
             'status_id'    => $default_status_id,
             'priority_id'  => $priority_id,
             'category_id'  => $category_id,
-            'source'       => 'web',
+            'source'       => $source,
             'ip_address'   => $ip_address,
-            'gdpr_consent' => 1,
+            'gdpr_consent' => $gdpr_consent ? 1 : 0,
             'date_created' => $now,
             'date_updated' => $now,
         ] );

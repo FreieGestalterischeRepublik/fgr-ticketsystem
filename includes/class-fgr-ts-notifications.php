@@ -2,8 +2,8 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * E-Mail-Benachrichtigungen. Bewusst nur ausgehend (siehe Planungs-Notizen:
- * Antwort-per-E-Mail kommt erst später) - kein IMAP/Mail-Piping.
+ * E-Mail-Benachrichtigungen. Ist der E-Mail-Eingang aktiv (siehe FGR_TS_Mail),
+ * tragen sie zusätzlich Reply-To, Antwort-Trennzeile und Ticket-Referenz.
  *
  * Regeln (wie mit Marc abgesprochen):
  * - Neues Ticket (noch nicht zugewiesen) -> alle Agenten.
@@ -33,7 +33,7 @@ class FGR_TS_Notifications {
         $message       = $this->compose( "Ein neues Ticket wurde erstellt von {$customer_name}:", $ticket_id, $ticket, $customer_name, $body );
 
         foreach ( $this->get_agent_emails() as $email ) {
-            $this->send( $email, "Neues Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+            $this->send( $email, "Neues Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
         }
     }
 
@@ -50,7 +50,7 @@ class FGR_TS_Notifications {
         foreach ( $agent_ids as $agent_id ) {
             $agent = get_userdata( $agent_id );
             if ( $agent ) {
-                $this->send( $agent->user_email, "Dir zugewiesen: Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+                $this->send( $agent->user_email, "Dir zugewiesen: Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
             }
         }
     }
@@ -64,7 +64,8 @@ class FGR_TS_Notifications {
         $body = $this->plain_text( $thread['body'] );
 
         if ( 'customer' === $author_role ) {
-            $customer_name   = $this->display_name( (int) $ticket['customer_id'] );
+            // Autor statt Ticket-Ersteller: Es kann auch ein weiterer Teilnehmer geantwortet haben.
+            $customer_name   = $this->display_name( (int) $thread['author_id'] );
             $message         = $this->compose( "Der Kunde {$customer_name} hat geantwortet:", $ticket_id, $ticket, $customer_name, $body );
             $assigned_agents = FGR_TS_Ticket::get_agents( $ticket_id );
 
@@ -72,12 +73,12 @@ class FGR_TS_Notifications {
                 foreach ( $assigned_agents as $agent_id ) {
                     $agent = get_userdata( $agent_id );
                     if ( $agent ) {
-                        $this->send( $agent->user_email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+                        $this->send( $agent->user_email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
                     }
                 }
             } else {
                 foreach ( $this->get_agent_emails() as $email ) {
-                    $this->send( $email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+                    $this->send( $email, "Neue Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
                 }
             }
         } elseif ( 'agent' === $author_role ) {
@@ -87,14 +88,14 @@ class FGR_TS_Notifications {
             }
             $agent_name = $thread['author_id'] ? $this->display_name( (int) $thread['author_id'] ) : 'FGR';
             $message    = $this->compose( "Es gibt eine neue Antwort von {$agent_name} zu deinem Ticket:", $ticket_id, $ticket, $agent_name, $body );
-            $this->send( $customer->user_email, "Antwort zu deinem Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+            $this->send( $customer->user_email, "Antwort zu deinem Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
 
             // Weitere Teilnehmer (siehe FGR_TS_Ticket::add_watcher()) sollen
             // genauso wie der Ersteller über neue Antworten informiert werden.
             foreach ( FGR_TS_Ticket::get_watchers( $ticket_id ) as $watcher_id ) {
                 $watcher = get_userdata( $watcher_id );
                 if ( $watcher ) {
-                    $this->send( $watcher->user_email, "Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message );
+                    $this->send( $watcher->user_email, "Antwort zu Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
                 }
             }
         }
@@ -102,7 +103,13 @@ class FGR_TS_Notifications {
 
     /** Baut den vollständigen Mailtext: Einleitung, Ticket-Angaben, kompletter Text, Link. */
     private function compose( string $headline, int $ticket_id, array $ticket, string $author_label, string $body_text ): string {
+        $mail_enabled = FGR_TS_Mail::is_enabled();
+
         $lines   = [];
+        if ( $mail_enabled ) {
+            $lines[] = FGR_TS_Mail::MARKER;
+            $lines[] = '';
+        }
         $lines[] = $headline;
         $lines[] = '';
         $lines[] = "Ticket #{$ticket_id}: {$ticket['subject']}";
@@ -112,6 +119,9 @@ class FGR_TS_Notifications {
         $lines[] = '';
         $lines[] = '---';
         $lines[] = 'Ticket ansehen: ' . $this->ticket_url( $ticket_id );
+        if ( $mail_enabled ) {
+            $lines[] = 'Referenz: ' . FGR_TS_Mail::reference( $ticket_id );
+        }
         return implode( "\n", $lines );
     }
 
@@ -145,7 +155,13 @@ class FGR_TS_Notifications {
         return $page_id ? add_query_arg( 'ticket', $ticket_id, get_permalink( $page_id ) ) : home_url( '/' );
     }
 
-    private function send( string $to, string $subject, string $body ): void {
-        wp_mail( $to, $subject, $body );
+    private function send( string $to, string $subject, string $body, int $ticket_id ): void {
+        $headers = [];
+        if ( FGR_TS_Mail::is_enabled() ) {
+            $subject  .= ' ' . FGR_TS_Mail::reference( $ticket_id );
+            $headers[] = 'Reply-To: ' . FGR_TS_Mail::settings()['address'];
+            $headers[] = 'Auto-Submitted: auto-generated';
+        }
+        wp_mail( $to, $subject, $body, $headers );
     }
 }
