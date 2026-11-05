@@ -13,6 +13,20 @@ class FGR_TS_Mail_Settings {
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_menu' ] );
         add_action( 'admin_post_fgr_ts_mail_save', [ $this, 'handle_save' ] );
+        add_action( 'admin_post_fgr_ts_mail_clear_log', [ $this, 'handle_clear_log' ] );
+    }
+
+    public function handle_clear_log(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'Keine Berechtigung.' );
+        }
+        check_admin_referer( 'fgr_ts_mail_clear_log', 'fgr_ts_nonce' );
+
+        $deleted = FGR_TS_Mail::clear_log();
+        $result  = null === $deleted ? [ 'clear_failed' => 1 ] : [ 'cleared' => $deleted ];
+
+        wp_safe_redirect( add_query_arg( [ 'page' => self::PAGE_SLUG ] + $result, admin_url( 'admin.php' ) ) );
+        exit;
     }
 
     public function add_menu(): void {
@@ -59,6 +73,12 @@ class FGR_TS_Mail_Settings {
 
             <?php if ( ! empty( $_GET['saved'] ) ) : ?>
                 <div class="notice notice-success"><p>Einstellungen gespeichert.</p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['cleared'] ) ) : ?>
+                <div class="notice notice-success"><p>Protokoll geleert (<?php echo (int) $_GET['cleared']; ?> Einträge).</p></div>
+            <?php endif; ?>
+            <?php if ( ! empty( $_GET['clear_failed'] ) ) : ?>
+                <div class="notice notice-error"><p>Protokoll nicht geleert: Entweder läuft gerade ein Abruf, dann bitte gleich noch einmal versuchen, oder der letzte Abruf ist fehlgeschlagen. Eine Mail könnte dann noch im Eingang liegen und würde ohne Protokoll doppelt importiert.</p></div>
             <?php endif; ?>
             <?php if ( ! function_exists( 'imap_open' ) ) : ?>
                 <div class="notice notice-warning"><p>Für diese PHP-Version fehlt hier die Erweiterung <code>imap</code>. Entscheidend ist die PHP-Version, mit der der Cronjob läuft.</p></div>
@@ -148,6 +168,13 @@ class FGR_TS_Mail_Settings {
                 <?php endforeach; ?>
                 </tbody>
             </table>
+            <?php if ( $log ) : ?>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm( 'Protokoll wirklich leeren? Tickets und Mails bleiben erhalten.' );">
+                    <input type="hidden" name="action" value="fgr_ts_mail_clear_log">
+                    <?php wp_nonce_field( 'fgr_ts_mail_clear_log', 'fgr_ts_nonce' ); ?>
+                    <p><button type="submit" class="button">Protokoll leeren</button></p>
+                </form>
+            <?php endif; ?>
         </div>
         <?php
     }

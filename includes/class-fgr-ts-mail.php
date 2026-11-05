@@ -29,7 +29,7 @@ class FGR_TS_Mail {
     const BATCH_SIZE         = 50;
     const MAX_MESSAGE_BYTES  = 41943040; // 40 MB (Base64 bläht 20-MB-Anhänge um ein Drittel auf)
     const MAX_BODY_CHARS     = 200000;
-    const MAX_MAILS_PER_HOUR = 20;       // bremst Autoresponder-Schleifen ohne Auto-Submitted-Header
+    const MAX_MAILS_PER_HOUR = 20;       // bremst Autoresponder-Schleifen ohne Auto-Submitted-Header, gilt nicht für Agenten
     const LOG_RETENTION_DAYS = 30;
 
     public static function init(): void {
@@ -133,7 +133,9 @@ class FGR_TS_Mail {
         }
         $user_id = (int) $user->ID;
 
-        if ( self::count_recent_imports( $mail['from_email'] ) >= self::MAX_MAILS_PER_HOUR ) {
+        // Agenten beantworten schnell viele Tickets. Eine Schleife läuft auch über
+        // den Kunden, weil Agenten-Antworten an ihn gehen, und stoppt dort.
+        if ( ! FGR_TS_Capabilities::is_agent( $user_id ) && self::count_recent_imports( $mail['from_email'] ) >= self::MAX_MAILS_PER_HOUR ) {
             return $review( 'Zu viele Mails von diesem Absender in der letzten Stunde' );
         }
 
@@ -348,6 +350,32 @@ class FGR_TS_Mail {
     public static function recent_log( int $limit = 25 ): array {
         global $wpdb;
         return $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'mail_log' ) . ' ORDER BY date_created DESC LIMIT %d', $limit ), ARRAY_A );
+    }
+
+    /**
+     * Leert das Protokoll von Hand. Das Protokoll ist auch der Doppelschutz:
+     * Nach einem gescheiterten Abruf kann eine importierte Mail noch im Eingang
+     * liegen und würde sonst erneut importiert. Darum dann nicht leeren, ebenso
+     * während eines Abrufs. "processing"-Einträge schützen nach einem Absturz
+     * vor doppelten Tickets und bleiben immer stehen.
+     * Gibt die Zahl der gelöschten Einträge zurück, null wenn es gerade nicht geht.
+     */
+    public static function clear_log(): ?int {
+        global $wpdb;
+
+        $status = (array) get_option( self::STATUS_OPTION, [] );
+        if ( ! empty( $status['error'] ) ) {
+            return null;
+        }
+
+        $lock = $wpdb->prefix . 'fgr_ts_mail_fetch';
+        if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) {
+            return null;
+        }
+        $deleted = (int) $wpdb->query( 'DELETE FROM ' . FGR_TS_Ticket::table( 'mail_log' ) . " WHERE result <> 'processing'" );
+        $wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+
+        return $deleted;
     }
 
     // --- Postfach ----------------------------------------------------------
