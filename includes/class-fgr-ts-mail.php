@@ -164,7 +164,7 @@ class FGR_TS_Mail {
         }
 
         // Kein Abschneiden von Zitaten: Bei Weiterleitungen ist das Zitat der eigentliche Inhalt.
-        $body = trim( $mail['text'] );
+        $body = FGR_TS_Mail_Parser::strip_signature( $mail['text'] );
         if ( '' === $body && ! $mail['attachments'] ) {
             return $review( 'Leere Mail' );
         }

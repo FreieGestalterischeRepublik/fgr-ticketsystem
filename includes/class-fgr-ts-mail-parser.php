@@ -13,6 +13,19 @@ class FGR_TS_Mail_Parser {
     /** Inline-Bilder unter dieser Größe gelten als Signatur-Logo und werden nicht übernommen. */
     const MIN_INLINE_IMAGE_BYTES = 51200;
 
+    /** Zitierweisen gängiger Mailprogramme. */
+    const QUOTE_PATTERNS = [
+        '/^[> ]*(Am|On)\s[^\n]{0,200}(\n[^\n]{0,200})?(schrieb|wrote)[^\n]*:[ \t]*$/mu',
+        '/^[> ]*-{2,}\s*(Ursprüngliche Nachricht|Original Message)/miu',
+        '/^[> ]*(Von|From):[^\n]*\n[> ]*(Gesendet|Sent|Datum|Date|An|To):/miu',
+        '/^_{10,}[ \t]*$/m',
+    ];
+
+    const FORWARD_PATTERN = '/^[> ]*(-{2,}\s*(Weitergeleitete Nachricht|Forwarded Message)|Begin forwarded message|Anfang der weitergeleiteten Nachricht)/miu';
+
+    /** Signatur-Trennzeile: "--", auch mit Leerzeichen dahinter (\x{00A0} aus HTML-Editoren). */
+    const SIGNATURE_PATTERN = '/^--[ \t\x{00A0}]*$/mu';
+
     public static function parse( string $raw ): array {
         [ $header_block, $body ] = self::split_entity( $raw );
         $headers = self::parse_headers( $header_block );
@@ -57,14 +70,7 @@ class FGR_TS_Mail_Parser {
             $text       = false === $line_start ? '' : substr( $text, 0, $line_start );
         }
 
-        $cut_patterns = [
-            '/^[> ]*(Am|On)\s[^\n]{0,200}(\n[^\n]{0,200})?(schrieb|wrote)[^\n]*:[ \t]*$/mu',
-            '/^[> ]*-{2,}\s*(Ursprüngliche Nachricht|Original Message)/miu',
-            '/^[> ]*(Von|From):[^\n]*\n[> ]*(Gesendet|Sent|Datum|Date|An|To):/miu',
-            '/^_{10,}[ \t]*$/m',
-            '/^-- ?$/m',
-        ];
-        foreach ( $cut_patterns as $pattern ) {
+        foreach ( array_merge( self::QUOTE_PATTERNS, [ self::SIGNATURE_PATTERN ] ) as $pattern ) {
             if ( preg_match( $pattern, $text, $match, PREG_OFFSET_CAPTURE ) ) {
                 $text = substr( $text, 0, $match[0][1] );
             }
@@ -77,6 +83,41 @@ class FGR_TS_Mail_Parser {
         }
 
         return trim( implode( "\n", $lines ) );
+    }
+
+    /**
+     * Für neue Tickets: Entfernt nur die Signatur des Absenders. Zitate bleiben,
+     * weil bei Weiterleitungen das Zitat der eigentliche Inhalt ist. Eine
+     * "--"-Zeile hinter dem Beginn des Zitats gehört zum Zitat und bleibt stehen.
+     */
+    public static function strip_signature( string $text ): string {
+        $text = str_replace( "\r\n", "\n", $text );
+
+        if ( ! preg_match( self::SIGNATURE_PATTERN, $text, $match, PREG_OFFSET_CAPTURE ) ) {
+            return trim( $text );
+        }
+        $signature = $match[0][1];
+
+        $quote = self::first_quote_offset( $text );
+        if ( null !== $quote && $quote < $signature ) {
+            return trim( $text );
+        }
+
+        $own_text = rtrim( substr( $text, 0, $signature ) );
+        if ( null === $quote ) {
+            return trim( $own_text );
+        }
+        return trim( $own_text . "\n\n" . substr( $text, $quote ) );
+    }
+
+    private static function first_quote_offset( string $text ): ?int {
+        $first = null;
+        foreach ( array_merge( self::QUOTE_PATTERNS, [ self::FORWARD_PATTERN ] ) as $pattern ) {
+            if ( preg_match( $pattern, $text, $match, PREG_OFFSET_CAPTURE ) && ( null === $first || $match[0][1] < $first ) ) {
+                $first = $match[0][1];
+            }
+        }
+        return $first;
     }
 
     // ---------------------------------------------------------------------
