@@ -21,6 +21,40 @@ class FGR_TS_Notifications {
         add_action( 'fgr_ts_ticket_created', [ $this, 'on_ticket_created' ] );
         add_action( 'fgr_ts_ticket_assigned', [ $this, 'on_ticket_assigned' ], 10, 2 );
         add_action( 'fgr_ts_ticket_replied', [ $this, 'on_ticket_replied' ], 10, 3 );
+        add_action( 'fgr_ts_ticket_opened_for_customer', [ $this, 'on_ticket_opened_for_customer' ], 10, 3 );
+    }
+
+    /** Ein Agent hat das Ticket für den Kunden eröffnet (FGR_TS_Ticket::create_for_customer()). */
+    public function on_ticket_opened_for_customer( int $ticket_id, int $agent_id, bool $is_new_account ): void {
+        $ticket   = FGR_TS_Ticket::get( $ticket_id );
+        $customer = $ticket ? get_userdata( (int) $ticket['customer_id'] ) : null;
+        if ( ! $customer ) {
+            return;
+        }
+
+        $footer = [];
+        if ( $is_new_account ) {
+            $footer[] = '';
+            $footer[] = 'Für dich wurde dazu ein Konto angelegt. Passwort festlegen (24 Stunden gültig, danach über "Passwort vergessen" beim Anmelden):';
+            $footer[] = $this->set_password_url( $customer );
+        }
+        if ( FGR_TS_Mail::is_enabled() ) {
+            $footer[] = '';
+            $footer[] = 'Du kannst auch einfach auf diese E-Mail antworten.';
+        }
+
+        $agent_name = $this->display_name( $agent_id );
+        $message    = $this->compose( "{$agent_name} hat für dich ein Ticket eröffnet:", $ticket_id, $ticket, $agent_name, $this->first_message_body( $ticket_id ), $footer );
+
+        $this->send( $customer->user_email, "Neues Ticket #{$ticket_id}: {$ticket['subject']}", $message, $ticket_id );
+    }
+
+    private function set_password_url( WP_User $user ): string {
+        $key = get_password_reset_key( $user );
+        if ( is_wp_error( $key ) ) {
+            return wp_lostpassword_url();
+        }
+        return network_site_url( 'wp-login.php?action=rp&key=' . $key . '&login=' . rawurlencode( $user->user_login ), 'login' );
     }
 
     public function on_ticket_created( int $ticket_id ): void {
@@ -102,7 +136,7 @@ class FGR_TS_Notifications {
     }
 
     /** Baut den vollständigen Mailtext: Einleitung, Ticket-Angaben, kompletter Text, Link. */
-    private function compose( string $headline, int $ticket_id, array $ticket, string $author_label, string $body_text ): string {
+    private function compose( string $headline, int $ticket_id, array $ticket, string $author_label, string $body_text, array $footer_lines = [] ): string {
         $mail_enabled = FGR_TS_Mail::is_enabled();
 
         $lines   = [];
@@ -119,6 +153,7 @@ class FGR_TS_Notifications {
         $lines[] = '';
         $lines[] = '---';
         $lines[] = 'Ticket ansehen: ' . $this->ticket_url( $ticket_id );
+        $lines   = array_merge( $lines, $footer_lines );
         if ( $mail_enabled ) {
             $lines[] = 'Referenz: ' . FGR_TS_Mail::reference( $ticket_id );
         }
@@ -142,7 +177,9 @@ class FGR_TS_Notifications {
 
     /** Mailtext ist Plaintext - HTML (v.a. bei migrierten Nachrichten) wird entfernt. */
     private function plain_text( string $body ): string {
-        return trim( html_entity_decode( wp_strip_all_tags( $body ), ENT_QUOTES, 'UTF-8' ) );
+        // Zeilenumbrüche vorher übernehmen, sonst kleben die Zeilen aus dem Editor aneinander.
+        $with_breaks = (string) preg_replace( '#<br\s*/?>|</p>#i', "\n", $body );
+        return trim( html_entity_decode( wp_strip_all_tags( $with_breaks ), ENT_QUOTES, 'UTF-8' ) );
     }
 
     private function get_agent_emails(): array {

@@ -11,9 +11,11 @@ defined( 'ABSPATH' ) || exit;
  */
 class FGR_TS_Admin {
 
-    const PAGE_SLUG = 'fgr-ticketsystem';
+    const PAGE_SLUG     = 'fgr-ticketsystem';
+    const NEW_PAGE_SLUG = 'fgr-ticketsystem-new';
 
     public function __construct() {
+        add_action( 'admin_post_fgr_ts_create_for_customer', [ $this, 'handle_create_for_customer' ] );
         add_action( 'admin_menu', [ $this, 'add_menu' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue' ] );
         add_action( 'admin_post_fgr_ts_reply', [ $this, 'handle_reply' ] );
@@ -57,6 +59,10 @@ class FGR_TS_Admin {
             'dashicons-tickets-alt',
             26
         );
+
+        if ( FGR_TS_Capabilities::is_agent( get_current_user_id() ) ) {
+            add_submenu_page( self::PAGE_SLUG, 'Neues Ticket', 'Neues Ticket', 'read', self::NEW_PAGE_SLUG, [ $this, 'render_new' ] );
+        }
     }
 
     public function enqueue( string $hook ): void {
@@ -115,7 +121,9 @@ class FGR_TS_Admin {
         $is_admin_tier = FGR_TS_Capabilities::is_admin_tier( $user_id );
         ?>
         <div class="wrap fgr-ts">
-            <h1>Tickets</h1>
+            <h1 class="wp-heading-inline">Tickets</h1>
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::NEW_PAGE_SLUG ) ); ?>" class="page-title-action">Neues Ticket</a>
+            <hr class="wp-header-end">
 
             <?php if ( isset( $_GET['bulk_done'] ) ) : ?>
                 <div class="notice notice-success is-dismissible"><p><?php echo (int) $_GET['bulk_done']; ?> Ticket(s) aktualisiert.</p></div>
@@ -367,6 +375,15 @@ class FGR_TS_Admin {
                 </div>
             <?php endif; ?>
 
+            <?php if ( isset( $_GET['opened'] ) && $customer ) : ?>
+                <div class="notice notice-success is-dismissible">
+                    <p>
+                        Ticket eröffnet, die Benachrichtigung ging an <?php echo esc_html( $customer->user_email ); ?>.
+                        <?php if ( 'new' === $_GET['opened'] ) : ?>Das Konto wurde neu angelegt, die Mail enthält den Link zum Passwort-Festlegen.<?php endif; ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-reply-form" enctype="multipart/form-data">
                 <?php wp_nonce_field( 'fgr_ts_reply_' . $ticket_id, 'fgr_ts_nonce' ); ?>
                 <input type="hidden" name="action" value="fgr_ts_reply">
@@ -431,6 +448,12 @@ class FGR_TS_Admin {
                 <?php endforeach; ?>
             </div>
         </div>
+        <?php
+        $this->wysiwyg_script();
+    }
+
+    private function wysiwyg_script(): void {
+        ?>
         <script>
         (function() {
             try { document.execCommand( 'defaultParagraphSeparator', false, 'br' ); } catch ( e ) {}
@@ -468,6 +491,192 @@ class FGR_TS_Admin {
     }
 
     // ---------------------------------------------------------------------
+
+    /** Formular: Ein Agent eröffnet ein Ticket für einen Kunden (siehe handle_create_for_customer()). */
+    public function render_new(): void {
+        global $wpdb;
+
+        $user_id = $this->require_agent();
+
+        // Nach einem Fehler kommen die Eingaben von dort zurück, statt verloren zu gehen.
+        $draft = get_transient( $this->draft_key( $user_id ) ) ?: [];
+        delete_transient( $this->draft_key( $user_id ) );
+        $draft = wp_parse_args( $draft, [ 'error' => '', 'email' => '', 'name' => '', 'subject' => '', 'body' => '', 'category_id' => 0, 'priority_id' => 0 ] );
+
+        $categories = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'categories' ) . ' ORDER BY sort_order', ARRAY_A );
+        $priorities = $wpdb->get_results( 'SELECT * FROM ' . FGR_TS_Ticket::table( 'priorities' ) . ' ORDER BY sort_order', ARRAY_A );
+
+        $customers = array_filter( get_users( [ 'orderby' => 'display_name', 'order' => 'ASC' ] ), function ( $u ) {
+            return ! FGR_TS_Capabilities::is_agent( (int) $u->ID ) && ! FGR_TS_Registration::is_pending( (int) $u->ID );
+        } );
+        ?>
+        <div class="wrap fgr-ts">
+            <h1>Neues Ticket für einen Kunden</h1>
+            <p>Der Kunde bekommt deinen Text per E-Mail und kann im Portal oder per Mail antworten. Das Ticket wird dir zugewiesen.</p>
+
+            <?php if ( '' !== $draft['error'] ) : ?>
+                <div class="notice notice-error"><p><?php echo esc_html( $draft['error'] ); ?></p></div>
+            <?php endif; ?>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgr-ts-reply-form" enctype="multipart/form-data">
+                <?php wp_nonce_field( 'fgr_ts_create_for_customer', 'fgr_ts_nonce' ); ?>
+                <input type="hidden" name="action" value="fgr_ts_create_for_customer">
+
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="fgr-ts-new-email">E-Mail des Kunden</label></th>
+                        <td>
+                            <input type="email" id="fgr-ts-new-email" name="email" class="regular-text" list="fgr-ts-new-customers" autocomplete="off" required value="<?php echo esc_attr( $draft['email'] ); ?>">
+                            <datalist id="fgr-ts-new-customers">
+                                <?php foreach ( $customers as $customer ) : ?>
+                                    <option value="<?php echo esc_attr( strtolower( $customer->user_email ) ); ?>"><?php echo esc_html( $customer->display_name ); ?></option>
+                                <?php endforeach; ?>
+                            </datalist>
+                            <p class="description" id="fgr-ts-new-hint">Bestehende Kunden werden beim Tippen vorgeschlagen. Für eine unbekannte Adresse wird ein Konto angelegt.</p>
+                        </td>
+                    </tr>
+                    <tr id="fgr-ts-new-name-row">
+                        <th scope="row"><label for="fgr-ts-new-name">Name (nur bei neuem Konto)</label></th>
+                        <td><input type="text" id="fgr-ts-new-name" name="name" class="regular-text" value="<?php echo esc_attr( $draft['name'] ); ?>"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="fgr-ts-new-subject">Betreff</label></th>
+                        <td><input type="text" id="fgr-ts-new-subject" name="subject" class="large-text" maxlength="255" required value="<?php echo esc_attr( $draft['subject'] ); ?>"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="fgr-ts-new-category">Kategorie</label></th>
+                        <td>
+                            <select id="fgr-ts-new-category" name="category_id">
+                                <?php foreach ( $categories as $category ) : ?>
+                                    <option value="<?php echo (int) $category['id']; ?>" <?php selected( (int) $draft['category_id'], (int) $category['id'] ); ?>><?php echo esc_html( $category['name'] ); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="fgr-ts-new-priority">Priorität</label></th>
+                        <td>
+                            <select id="fgr-ts-new-priority" name="priority_id">
+                                <?php foreach ( $priorities as $priority ) : ?>
+                                    <option value="<?php echo (int) $priority['id']; ?>" <?php selected( (int) $draft['priority_id'], (int) $priority['id'] ); ?>><?php echo esc_html( $priority['name'] ); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+
+                <h2>Nachricht an den Kunden</h2>
+                <?php echo $this->wysiwyg_field( $draft['body'], 160 ); ?>
+                <p>
+                    <label for="fgr-ts-attachments">Anhänge (max. 20 MB pro Datei)</label><br>
+                    <input type="file" id="fgr-ts-attachments" name="attachments[]" multiple>
+                </p>
+                <button type="submit" class="button button-primary">Ticket eröffnen und Kunden benachrichtigen</button>
+            </form>
+        </div>
+        <script>
+        (function() {
+            var email = document.getElementById( 'fgr-ts-new-email' );
+            var row   = document.getElementById( 'fgr-ts-new-name-row' );
+            var hint  = document.getElementById( 'fgr-ts-new-hint' );
+            var known = Array.prototype.map.call( document.querySelectorAll( '#fgr-ts-new-customers option' ), function( option ) {
+                return option.value;
+            } );
+
+            function update() {
+                var value  = email.value.trim().toLowerCase();
+                var exists = known.indexOf( value ) !== -1;
+                row.style.display = exists ? 'none' : '';
+                if ( value ) {
+                    hint.textContent = exists ? 'Bestehender Kunde.' : 'Neuer Kunde: Es wird ein Konto mit dieser Adresse angelegt. Bitte auf Tippfehler prüfen.';
+                }
+            }
+            email.addEventListener( 'input', update );
+            update();
+        })();
+        </script>
+        <?php
+        $this->wysiwyg_script();
+    }
+
+    public function handle_create_for_customer(): void {
+        global $wpdb;
+
+        $user_id = $this->require_agent();
+        check_admin_referer( 'fgr_ts_create_for_customer', 'fgr_ts_nonce' );
+
+        $input = [
+            'email'       => sanitize_email( wp_unslash( $_POST['email'] ?? '' ) ),
+            'name'        => sanitize_text_field( wp_unslash( $_POST['name'] ?? '' ) ),
+            'subject'     => sanitize_text_field( wp_unslash( $_POST['subject'] ?? '' ) ),
+            'body'        => $this->sanitize_rich_body( wp_unslash( $_POST['body'] ?? '' ) ),
+            'category_id' => (int) ( $_POST['category_id'] ?? 0 ),
+            'priority_id' => (int) ( $_POST['priority_id'] ?? 0 ),
+        ];
+
+        $fail = function ( string $error ) use ( $input, $user_id ): void {
+            set_transient( $this->draft_key( $user_id ), $input + [ 'error' => $error ], 10 * MINUTE_IN_SECONDS );
+            wp_safe_redirect( admin_url( 'admin.php?page=' . self::NEW_PAGE_SLUG ) );
+            exit;
+        };
+
+        $category_exists = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . FGR_TS_Ticket::table( 'categories' ) . ' WHERE id = %d', $input['category_id'] ) );
+        if ( ! is_email( $input['email'] ) ) {
+            $fail( 'Bitte eine gültige E-Mail-Adresse angeben.' );
+        }
+        if ( '' === $input['subject'] || '' === trim( wp_strip_all_tags( $input['body'] ) ) || ! $category_exists ) {
+            $fail( 'Bitte Betreff, Nachricht und Kategorie angeben.' );
+        }
+
+        $customer = get_user_by( 'email', $input['email'] );
+        if ( $customer && FGR_TS_Capabilities::is_agent( (int) $customer->ID ) ) {
+            $fail( 'Diese Adresse gehört einem Agenten, nicht einem Kunden.' );
+        }
+        // Nicht einfach freischalten: Wer sich mit fremder Adresse registriert, kennt das
+        // Passwort dieses Kontos und könnte das Ticket sonst mitlesen.
+        if ( $customer && FGR_TS_Registration::is_pending( (int) $customer->ID ) ) {
+            $fail( 'Dieses Konto ist noch nicht per E-Mail bestätigt. Bitte warten, bis der Kunde bestätigt hat oder das Konto nach 30 Minuten verfallen ist.' );
+        }
+        if ( ! $customer && '' === $input['name'] ) {
+            $fail( 'Für diese Adresse gibt es noch kein Konto. Bitte auch den Namen angeben.' );
+        }
+
+        $is_new_account = ! $customer;
+        if ( $is_new_account ) {
+            $customer_id = FGR_TS_Registration::create_customer_account( $input['name'], $input['email'] );
+            if ( is_wp_error( $customer_id ) ) {
+                $fail( 'Konto konnte nicht angelegt werden: ' . $customer_id->get_error_message() );
+            }
+        } else {
+            $customer_id = (int) $customer->ID;
+        }
+
+        $ip        = $_SERVER['REMOTE_ADDR'] ?? null;
+        $ticket_id = FGR_TS_Ticket::create_for_customer( $user_id, (int) $customer_id, $input['subject'], $input['body'], $input['category_id'], $input['priority_id'], $ip, $is_new_account );
+        if ( ! $ticket_id ) {
+            if ( $is_new_account ) {
+                wp_delete_user( (int) $customer_id );
+            }
+            $fail( 'Ticket konnte nicht angelegt werden.' );
+        }
+
+        $errors = [];
+        if ( ! empty( $_FILES['attachments'] ) ) {
+            $thread_id = (int) ( FGR_TS_Ticket::get_threads( $ticket_id )[0]['id'] ?? 0 );
+            $errors    = FGR_TS_Attachment::handle_uploads( $_FILES['attachments'], $ticket_id, $thread_id, $user_id );
+        }
+
+        $redirect = admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&ticket=' . $ticket_id . '&opened=' . ( $is_new_account ? 'new' : 'existing' ) );
+        if ( $errors ) {
+            $redirect = add_query_arg( 'upload_errors', rawurlencode( implode( '||', $errors ) ), $redirect );
+        }
+        wp_safe_redirect( $redirect );
+        exit;
+    }
+
+    private function draft_key( int $user_id ): string {
+        return 'fgr_ts_new_ticket_draft_' . $user_id;
+    }
 
     public function handle_reply(): void {
         $user_id   = $this->require_agent();

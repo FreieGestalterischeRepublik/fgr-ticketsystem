@@ -85,6 +85,22 @@ class FGR_TS_Registration {
         );
     }
 
+    /**
+     * Konto für einen Kunden, für den ein Agent ein Ticket eröffnet. Sofort
+     * aktiv, weil das Passwort zufällig ist: Zugang gibt es nur über den Link
+     * in der Mail an diese Adresse. Gibt die User-ID oder WP_Error zurück.
+     */
+    public static function create_customer_account( string $name, string $email ) {
+        return wp_insert_user( [
+            'user_login'   => $email,
+            'user_email'   => $email,
+            'user_pass'    => wp_generate_password( 32, true, true ),
+            'display_name' => $name,
+            'first_name'   => $name,
+            'role'         => 'subscriber',
+        ] );
+    }
+
     public static function is_pending( int $user_id ): bool {
         return (bool) get_user_meta( $user_id, self::META_PENDING, true );
     }

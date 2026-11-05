@@ -21,6 +21,42 @@ class FGR_TS_Ticket {
      * Gibt die neue Ticket-ID zurück.
      */
     public static function create( int $customer_id, string $subject, string $body, int $category_id, ?string $ip_address = null, ?int $priority_id = null, string $source = 'web', bool $gdpr_consent = true ): int {
+        $ticket_id = self::insert_ticket( $customer_id, $subject, $category_id, $ip_address, $priority_id, $source, $gdpr_consent );
+
+        // $trigger_reply_events = false: die erste Nachricht eines Tickets ist
+        // die Beschreibung, keine "Antwort" - sonst würde der Status sofort
+        // automatisch auf "Warten auf FGR-Antwort" vorrücken und zusätzlich zu
+        // "Neues Ticket" noch eine (inhaltslose) "Kunde hat geantwortet"-Mail
+        // an alle Agenten gehen (siehe FGR_TS_Notifications::on_ticket_replied()).
+        self::add_thread( $ticket_id, 'message', $customer_id, 'customer', $body, $ip_address, false );
+
+        do_action( 'fgr_ts_ticket_created', $ticket_id );
+
+        return $ticket_id;
+    }
+
+    /**
+     * Ein Agent eröffnet ein Ticket für einen Kunden: Der Agent ist Autor der
+     * ersten Nachricht und zugewiesen, der Ball liegt beim Kunden. Darum geht
+     * die Mail an den Kunden statt an alle Agenten ("fgr_ts_ticket_created"
+     * wird bewusst nicht ausgelöst). Keine Einwilligung abgefragt.
+     */
+    public static function create_for_customer( int $agent_id, int $customer_id, string $subject, string $body, int $category_id, ?int $priority_id, ?string $ip_address, bool $is_new_account ): int {
+        $ticket_id = self::insert_ticket( $customer_id, $subject, $category_id, $ip_address, $priority_id, 'agent', false );
+        if ( ! $ticket_id ) {
+            return 0;
+        }
+
+        self::add_thread( $ticket_id, 'message', $agent_id, 'agent', $body, $ip_address, false );
+        self::set_agents( $ticket_id, [ $agent_id ], $agent_id );
+        self::set_status_by_name( $ticket_id, 'Warten auf Kundenantwort' );
+
+        do_action( 'fgr_ts_ticket_opened_for_customer', $ticket_id, $agent_id, $is_new_account );
+
+        return $ticket_id;
+    }
+
+    private static function insert_ticket( int $customer_id, string $subject, int $category_id, ?string $ip_address, ?int $priority_id, string $source, bool $gdpr_consent ): int {
         global $wpdb;
 
         $default_status_id = (int) $wpdb->get_var( "SELECT id FROM " . self::table( 'statuses' ) . " WHERE is_closed = 0 ORDER BY sort_order ASC LIMIT 1" );
@@ -41,18 +77,7 @@ class FGR_TS_Ticket {
             'date_created' => $now,
             'date_updated' => $now,
         ] );
-        $ticket_id = (int) $wpdb->insert_id;
-
-        // $trigger_reply_events = false: die erste Nachricht eines Tickets ist
-        // die Beschreibung, keine "Antwort" - sonst würde der Status sofort
-        // automatisch auf "Warten auf FGR-Antwort" vorrücken und zusätzlich zu
-        // "Neues Ticket" noch eine (inhaltslose) "Kunde hat geantwortet"-Mail
-        // an alle Agenten gehen (siehe FGR_TS_Notifications::on_ticket_replied()).
-        self::add_thread( $ticket_id, 'message', $customer_id, 'customer', $body, $ip_address, false );
-
-        do_action( 'fgr_ts_ticket_created', $ticket_id );
-
-        return $ticket_id;
+        return (int) $wpdb->insert_id;
     }
 
     /**
